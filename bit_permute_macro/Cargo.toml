@@ -1,0 +1,24 @@
+[package]
+name = "bit_permute_macro"
+version = "1.0.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[[bench]]
+name = "permutations"
+harness = false
+
+[dependencies]
+syn = "1"
+quote = "1"
+proc-macro2 = "1"
+darling = "0.14"
+itertools = "0.10"
+bit_permute = { path = "../bit_permute" }
+
+[dev-dependencies]
+criterion = "0.4"
+rand = "*"
+bitvec = "1"

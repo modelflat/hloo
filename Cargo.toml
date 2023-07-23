@@ -1,0 +1,23 @@
+[package]
+name = "hloo"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]
+members = [
+    "bit_permute",
+    "bit_permute_macro",
+]
+
+[[bench]]
+name = "search"
+harness = false
+
+[dependencies]
+bit_permute_macro = { path = "bit_permute_macro" }
+memmap2 = "0.5"
+
+[dev-dependencies]
+criterion = "0.4"
+tempfile = "3"
+rand = "*"
