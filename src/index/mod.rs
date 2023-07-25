@@ -41,7 +41,7 @@ where
     }
 }
 
-pub trait BitPermuter<K, V, M> {
+pub trait BitPermuter<K, M> {
     /// Apply permutation to bit sequence `key`.
     fn apply(&self, key: K) -> K;
 
@@ -55,7 +55,7 @@ pub trait BitPermuter<K, V, M> {
 pub trait Index<K, V, M, P>
 where
     K: Ord,
-    P: BitPermuter<K, V, M>,
+    P: BitPermuter<K, M>,
 {
     type Error;
 

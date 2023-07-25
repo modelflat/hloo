@@ -16,7 +16,7 @@ where
     K: Copy,
     V: Copy,
     M: Copy + Ord,
-    P: BitPermuter<K, V, M>,
+    P: BitPermuter<K, M>,
 {
     pub fn new(permuter: P, path: PathBuf) -> Result<Self, io::Error> {
         Ok(Self {
@@ -33,7 +33,7 @@ where
     K: Copy + Ord,
     V: Copy,
     M: Copy + Ord,
-    P: BitPermuter<K, V, M>,
+    P: BitPermuter<K, M>,
 {
     type Error = io::Error;
 
@@ -89,7 +89,7 @@ mod tests {
 
     struct MyPermuter(Arc<dyn Permutation>);
 
-    impl BitPermuter<Bits, i32, Mask> for MyPermuter {
+    impl BitPermuter<Bits, Mask> for MyPermuter {
         fn apply(&self, key: Bits) -> Bits {
             self.0.apply(key)
         }

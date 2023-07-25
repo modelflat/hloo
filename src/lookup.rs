@@ -10,7 +10,8 @@ pub struct Lookup<K, V, M, P, I> {
 impl<K, V, M, P, I> Lookup<K, V, M, P, I>
 where
     K: Copy + Ord,
-    P: BitPermuter<K, V, M>,
+    M: Copy + Ord,
+    P: BitPermuter<K, M>,
     I: Index<K, V, M, P>,
 {
     pub fn new(indexes: Vec<I>) -> Self {
@@ -27,12 +28,12 @@ where
         Ok(())
     }
 
-    pub fn search(&self, key: K, distance: u32) -> Result<Vec<SearchResultItem<V>>, I::Error> {
-        let mut result = Vec::new();
+    pub fn search(&self, key: K, distance: u32) -> Result<impl Iterator<Item = SearchResultItem<V>>, I::Error> {
+        let mut result = Vec::with_capacity(self.indexes.len());
         for index in &self.indexes {
             let index_result = index.search(key, distance)?;
-            result.extend(index_result);
+            result.push(index_result);
         }
-        Ok(result)
+        Ok(result.into_iter().flat_map(|v| v))
     }
 }

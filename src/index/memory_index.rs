@@ -14,7 +14,7 @@ impl<K, V, M, P> MemoryIndex<K, V, M, P>
 where
     K: Copy,
     M: Copy + Ord,
-    P: BitPermuter<K, V, M>,
+    P: BitPermuter<K, M>,
 {
     pub fn new(permuter: P) -> Self {
         Self {
@@ -30,7 +30,7 @@ where
     K: Copy + Ord,
     V: Copy,
     M: Copy + Ord,
-    P: BitPermuter<K, V, M>,
+    P: BitPermuter<K, M>,
 {
     type Error = ();
 
@@ -86,7 +86,7 @@ mod tests {
 
     pub struct MyPermuter(Arc<dyn Permutation>);
 
-    impl BitPermuter<Bits, i32, Mask> for MyPermuter {
+    impl BitPermuter<Bits, Mask> for MyPermuter {
         fn apply(&self, key: Bits) -> Bits {
             self.0.apply(key)
         }
