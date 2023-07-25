@@ -1,60 +1,58 @@
-use std::path::Path;
-
 use criterion::{criterion_group, criterion_main, Criterion};
 
-use hloo::MmVec;
-use tempfile::TempDir;
+use hloo::{create_permuter, Index, MemMapIndex, MemoryIndex};
 
-use hloo::make_permutations;
+create_permuter!(MyPermuter, 32, 5, 2, 32);
 
-// fn generate_data(n: usize) -> Vec<HashTuple> {
-//     let mut data = Vec::with_capacity(n);
-//     for i in 0..n {
-//         let hash = HashValue::new(rand::random());
-//         data.push((i as ImageId, hash));
-//     }
-//     data
-// }
-
-// fn generate_data_mmap(n: usize, path: &Path) -> MmVec<HashTuple> {
-//     let gen = generate_data(n);
-//     MmVec::from_vec(gen, path.to_path_buf()).expect("failed to create mmaped vec")
-// }
-
-fn table_search_bench(c: &mut Criterion) {
-    println!("preparing data...");
-    let tmp_dir = TempDir::new().expect("failed to create index temp dir");
-    // let data = generate_data_mmap(100_000_000, &tmp_dir.path().join("table.mmap"));
-    // let permutation = PermutationUtil::get_variant(3);
-
-    todo!()
-
-    // let table = SearchTable::new(permutation, data);
-
-    // c.bench_function("table.search", |b| {
-    //     b.iter(|| {
-    //         let target = HashValue::new(rand::random());
-    //         table.search(target, 6)
-    //     })
-    // });
+fn generate_data(n: usize) -> Vec<(Bits, i64)> {
+    let mut data = Vec::with_capacity(n);
+    for i in 0..n {
+        let hash = Bits::new(rand::random());
+        data.push((hash, i as i64));
+    }
+    data
 }
 
-fn index_search_bench(c: &mut Criterion) {
-    println!("preparing data...");
-    let tmp_dir = TempDir::new().expect("failed to create index temp dir");
-    // let data = generate_data_mmap(100_000_000, &tmp_dir.path().join("index.data.mmap"));
-
-    todo!()
-
-    // let index = Index::new(data, tmp_dir.path()).expect("failed to create index");
-
-    // c.bench_function("index.search", |b| {
-    //     b.iter(|| {
-    //         let target = HashValue::new(rand::random());
-    //         index.search_v2(target, 6)
-    //     })
-    // });
+fn generate_target(data: &[(Bits, i64)], change_bits: usize) -> Bits {
+    let pos = (rand::random::<f32>() * data.len() as f32) as usize;
+    let mut target = data[pos].0;
+    for _ in 0..change_bits {
+        let pos = (rand::random::<f32>() * 31f32) as usize;
+        let bit = (target.data[0] & (1 << pos)) >> pos;
+        if bit == 0 {
+            target.data[0] = target.data[0] | (1 << pos);
+        } else {
+            target.data[0] = target.data[0] & !(1 << pos);
+        }
+    }
+    target
 }
 
-criterion_group!(benches, table_search_bench, index_search_bench);
+fn memory_index_search_bench(c: &mut Criterion) {
+    let permutation = MyPermuter::get(3);
+    let mut index = MemoryIndex::new(permutation);
+    println!("preparing data...");
+    let data = generate_data(100_000_000);
+    println!("inserting data into index...");
+    index.insert(&data).unwrap();
+
+    let target = generate_target(&data, 5);
+    c.bench_function("memory index - search", |b| b.iter(|| index.search(target, 6)));
+}
+
+fn memvec_index_search_bench(c: &mut Criterion) {
+    let tempdir = tempfile::tempdir().expect("failed to create temp dir");
+    let path = tempdir.path().join("index.bin");
+    let permutation = MyPermuter::get(3);
+    let mut index = MemMapIndex::new(permutation, path).expect("failed to create index");
+    println!("preparing data...");
+    let data = generate_data(100_000_000);
+    println!("inserting data into index...");
+    index.insert(&data).expect("failed to insert data to index");
+
+    let target = generate_target(&data, 5);
+    c.bench_function("memory index - search", |b| b.iter(|| index.search(target, 6)));
+}
+
+criterion_group!(benches, memory_index_search_bench, memvec_index_search_bench);
 criterion_main!(benches);

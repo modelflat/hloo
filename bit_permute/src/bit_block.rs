@@ -253,11 +253,7 @@ impl BitOp {
 
     pub fn combine(&self, op: &Self) -> Option<Self> {
         if self.clone_with_mask(0) == op.clone_with_mask(0) {
-            if let Some(combined_mask) = combine_masks(self.mask(), op.mask()) {
-                Some(self.clone_with_mask(combined_mask))
-            } else {
-                None
-            }
+            combine_masks(self.mask(), op.mask()).map(|combined| self.clone_with_mask(combined))
         } else {
             None
         }

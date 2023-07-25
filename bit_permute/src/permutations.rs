@@ -59,7 +59,7 @@ impl Permutation {
     }
 }
 
-fn compile_permutation<'a>(
+fn compile_permutation(
     ops: impl Iterator<Item = BitOp>,
     word_size: usize,
     optimize: bool,

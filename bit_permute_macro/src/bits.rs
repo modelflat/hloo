@@ -1,5 +1,5 @@
 use darling::{FromMeta, ToTokens};
-use proc_macro2::{Ident, TokenStream};
+use proc_macro2::Ident;
 use quote::{format_ident, quote};
 use syn::{Type, TypeArray};
 
@@ -11,12 +11,7 @@ pub struct Bits<'a> {
 }
 
 impl<'a> Bits<'a> {
-    pub fn new(
-        type_name: &'a Ident,
-        word_type_name: &'a Ident,
-        word_size: usize,
-        n_words: usize,
-    ) -> Self {
+    pub fn new(type_name: &'a Ident, word_type_name: &'a Ident, word_size: usize, n_words: usize) -> Self {
         Self {
             type_name,
             word_type_name,
@@ -39,19 +34,18 @@ impl ToTokens for Bits<'_> {
         let word_range_xor = word_range_le.clone();
         let word_max = word_range_le.clone().map(|_| word_type_name.clone());
 
-        let data_type =
-            match TypeArray::from_string(&format!("[{}; {}]", self.word_type_name, self.n_words)) {
-                Ok(arr) => Type::Array(arr),
-                Err(e) => {
-                    tokens.extend(TokenStream::from(e.write_errors()));
-                    return;
-                }
-            };
+        let data_type = match TypeArray::from_string(&format!("[{}; {}]", self.word_type_name, self.n_words)) {
+            Ok(arr) => Type::Array(arr),
+            Err(e) => {
+                tokens.extend(e.write_errors());
+                return;
+            }
+        };
 
         let code = quote! {
             pub type #storage_type_name = #data_type;
 
-            #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+            #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
             #[repr(C)]
             pub struct #type_name {
                 pub data: #storage_type_name,
