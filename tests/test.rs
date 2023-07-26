@@ -47,8 +47,9 @@ fn memmap_lookup_compiles_and_runs_without_errors() {
     );
 }
 
+/// This was due to an incorre
 #[test]
-fn test_weird_error() {
+fn test_memory_single_entry() {
     println!("{:032b}", 851899373);
     let init_data = vec![(Bits { data: [851899373] }, 0)];
     let target = init_data[0].0;
