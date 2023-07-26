@@ -29,9 +29,7 @@ fn apply_works_correctly() {
     assert_eq!(PermutationUtil::get_all_variants().len(), 10);
     for (pi, perm) in PermutationUtil::get_all_variants().iter().enumerate() {
         let res = perm.apply(bits);
-        let found = expected
-            .iter()
-            .find_position(|mask| res.data[0] & **mask == **mask);
+        let found = expected.iter().find_position(|mask| res.data[0] & **mask == **mask);
         if let Some((i, _)) = found {
             expected.remove(i);
         } else {
@@ -127,11 +125,7 @@ fn apply_then_revert_is_identity() {
     for (i, perm) in PermutationUtil::get_all_variants().iter().enumerate() {
         let permuted = perm.apply(bits);
         let reverted = perm.revert(permuted);
-        assert_eq!(
-            bits, reverted,
-            "permutation {}: failed apply-revert test!",
-            i
-        );
+        assert_eq!(bits, reverted, "permutation {}: failed apply-revert test!", i);
     }
 }
 

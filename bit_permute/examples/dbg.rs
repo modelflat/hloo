@@ -13,11 +13,7 @@ fn main() {
             println!("{}", block);
         }
         println!("--- compiled apply ---");
-        for (word, ops) in perm
-            .compile_apply(word_bits, true)
-            .iter()
-            .sorted_by_key(|i| *i.0)
-        {
+        for (word, ops) in perm.compile_apply(word_bits, true).iter().sorted_by_key(|i| *i.0) {
             println!("w[{}] = {{", word);
             for op in ops {
                 println!("  {}", op)

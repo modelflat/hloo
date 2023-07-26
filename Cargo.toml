@@ -6,17 +6,25 @@ edition = "2021"
 [workspace]
 members = ["bit_permute", "bit_permute_macro"]
 
-[[bench]]
-name = "search"
-harness = false
-
 [dependencies]
 bit_permute = { path = "bit_permute" }
 bit_permute_macro = { path = "bit_permute_macro" }
 memmap2 = "0.5"
 crc32fast = "1"
+tempfile = "3"
 
 [dev-dependencies]
-criterion = "0.4"
-tempfile = "3"
-rand = "*"
+rand = "0.8"
+
+[dev-dependencies.criterion]
+version = "0.5"
+default-features = false
+features = ["cargo_bench_support", "html_reports"]
+
+[[bench]]
+name = "all"
+harness = false
+
+[[bench]]
+name = "internal"
+harness = false

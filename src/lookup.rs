@@ -34,6 +34,6 @@ where
             let index_result = index.search(key, distance)?;
             result.push(index_result);
         }
-        Ok(result.into_iter().flat_map(|v| v))
+        Ok(result.into_iter().flatten())
     }
 }

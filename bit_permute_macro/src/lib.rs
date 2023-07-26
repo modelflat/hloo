@@ -50,11 +50,7 @@ pub fn make_permutations(item: TokenStream) -> TokenStream {
 
     let bits_definition = Bits::new(&data_type_name, &word_type_name, word_bits, n_words);
 
-    let mask_size = perms
-        .iter()
-        .map(|p| p.mask_words(word_bits))
-        .max()
-        .unwrap_or(0);
+    let mask_size = perms.iter().map(|p| p.mask_words(word_bits)).max().unwrap_or(0);
     let mask_definition = Bits::new(&mask_type_name, &word_type_name, word_bits, mask_size);
 
     let perms_definitions = perms

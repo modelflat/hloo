@@ -10,10 +10,10 @@
 //! lookup.search(Bits::new(rand::random()), 5);
 //! ```
 
-mod index;
-mod lookup;
-mod mmvec;
-mod util;
+pub mod index;
+pub mod lookup;
+pub mod mmvec;
+pub mod util;
 
 pub use bit_permute_macro::make_permutations;
 
@@ -36,7 +36,7 @@ macro_rules! create_permuter {
             pub fn get(i: usize) -> Self {
                 Self(PermutationUtil::get_variant(i))
             }
-            pub fn create_in_memory_lookup<T: Copy>(
+            pub fn create_in_memory_lookup<T: Copy + Default>(
             ) -> hloo::Lookup<Bits, T, Mask, Self, hloo::MemoryIndex<Bits, T, Mask, Self>> {
                 let indexes = Self::all().into_iter().map(hloo::MemoryIndex::new).collect();
                 hloo::Lookup::new(indexes)

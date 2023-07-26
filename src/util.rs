@@ -1,6 +1,6 @@
 pub fn merge_sorted_alloc<T, K>(src1: &[T], src2: &[T], sort_key: impl Fn(T) -> K) -> Vec<T>
 where
-    T: Copy,
+    T: Copy + Default,
     K: Ord,
 {
     let len = src1.len() + src2.len();

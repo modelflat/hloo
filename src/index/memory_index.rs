@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use crate::util::merge_sorted_alloc;
 
-use super::{filter_by_distance, find_block_bounds, BitPermuter, Index, SearchResultItem};
+use super::{compute_index_stats, scan_block, select_block_at, BitPermuter, Index, SearchResultItem};
 
 pub struct MemoryIndex<K, V, M, P> {
     permuter: P,
@@ -27,8 +27,8 @@ where
 
 impl<K, V, M, P> Index<K, V, M, P> for MemoryIndex<K, V, M, P>
 where
-    K: Copy + Ord,
-    V: Copy,
+    K: Copy + Ord + Default,
+    V: Copy + Default,
     M: Copy + Ord,
     P: BitPermuter<K, M>,
 {
@@ -60,15 +60,21 @@ where
     fn search(&self, key: K, distance: u32) -> Result<Vec<SearchResultItem<V>>, Self::Error> {
         let permuted_key = self.permuter.apply(key);
         let masked_key = self.permuter.mask(&permuted_key);
-        let block = self
+        let location = self
             .data
-            .binary_search_by_key(&masked_key, |(key, _)| self.permuter.mask(key))
-            .map_or_else(
-                |_| &self.data[0..0],
-                |pos| find_block_bounds(&self.data, pos, |key| self.permuter.mask(key)),
-            );
-        let result = filter_by_distance(block, &permuted_key, distance, |k1, k2| self.permuter.dist(k1, k2));
-        Ok(result)
+            .binary_search_by_key(&masked_key, |(key, _)| self.permuter.mask(key));
+        match location {
+            Ok(pos) => {
+                let block = select_block_at(&self.data, pos, |key| self.permuter.mask(key));
+                let result = scan_block(block, &permuted_key, distance, |k1, k2| self.permuter.dist(k1, k2));
+                Ok(result)
+            }
+            Err(_) => Ok(vec![]),
+        }
+    }
+
+    fn stats(&self) -> super::IndexStats {
+        compute_index_stats(&self.data, |key| self.permuter.mask(key))
     }
 }
 

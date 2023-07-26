@@ -2,7 +2,7 @@ use std::{io, marker::PhantomData, path::PathBuf};
 
 use crate::mmvec::MmVec;
 
-use super::{filter_by_distance, find_block_bounds, BitPermuter, Index, SearchResultItem};
+use super::{compute_index_stats, scan_block, select_block_at, BitPermuter, Index, SearchResultItem};
 
 pub struct MemMapIndex<K, V, M, P> {
     permuter: P,
@@ -25,6 +25,10 @@ where
             data: MmVec::with_length_uninit(0, path)?,
             mask_type: Default::default(),
         })
+    }
+
+    fn as_slice(&self) -> &[(K, V)] {
+        unsafe { self.data.as_slice() }
     }
 }
 
@@ -60,7 +64,7 @@ where
     }
 
     fn search(&self, key: K, distance: u32) -> Result<Vec<SearchResultItem<V>>, Self::Error> {
-        let data = unsafe { self.data.as_slice() };
+        let data = self.as_slice();
         let permuted_key = self.permuter.apply(key);
         let masked_key = self.permuter.mask(&permuted_key);
         let block = self
@@ -68,10 +72,14 @@ where
             .binary_search_by_key(&masked_key, |(key, _)| self.permuter.mask(key))
             .map_or_else(
                 |_| &data[0..0],
-                |pos| find_block_bounds(data, pos, |key| self.permuter.mask(key)),
+                |pos| select_block_at(data, pos, |key| self.permuter.mask(key)),
             );
-        let result = filter_by_distance(block, &permuted_key, distance, |k1, k2| self.permuter.dist(k1, k2));
+        let result = scan_block(block, &permuted_key, distance, |k1, k2| self.permuter.dist(k1, k2));
         Ok(result)
+    }
+
+    fn stats(&self) -> super::IndexStats {
+        compute_index_stats(self.as_slice(), |key| self.permuter.mask(key))
     }
 }
 
