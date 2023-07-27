@@ -1,11 +1,12 @@
 use std::{fmt::Debug, marker::PhantomData};
 
+use bit_permute::Distance;
 use thiserror::Error;
 
 use super::{compute_index_stats, scan_block, select_block_at, BitPermuter, Index, SearchResultItem};
 
 #[derive(Debug, Error)]
-pub enum MemoryIndexError {
+pub enum MemIndexError {
     #[error("distance ({distance}) exceeds maximum allowed distance for index ({max})")]
     DistanceExceedsMax { distance: u32, max: u32 },
 }
@@ -37,12 +38,12 @@ where
 
 impl<K, V, M, P> Index<K, V, M, P> for MemIndex<K, V, M, P>
 where
-    K: Copy + Ord,
+    K: Copy + Distance + Ord,
     V: Copy,
     M: Copy + Ord,
     P: BitPermuter<K, M>,
 {
-    type Error = MemoryIndexError;
+    type Error = MemIndexError;
 
     fn load(&mut self) -> Result<(), Self::Error>
     where
@@ -66,10 +67,10 @@ where
     }
 
     fn search(&self, key: K, distance: u32) -> Result<Vec<SearchResultItem<V>>, Self::Error> {
-        if distance >= P::n_blocks() {
+        if distance >= self.permuter.n_blocks() {
             return Err(Self::Error::DistanceExceedsMax {
                 distance,
-                max: P::n_blocks(),
+                max: self.permuter.n_blocks(),
             });
         }
         let permuted_key = self.permuter.apply(key);
@@ -80,7 +81,7 @@ where
         match location {
             Ok(pos) => {
                 let block = select_block_at(&self.data, pos, |key| self.permuter.mask(key));
-                let result = scan_block(block, &permuted_key, distance, |k1, k2| self.permuter.dist(k1, k2));
+                let result = scan_block(block, &permuted_key, distance);
                 Ok(result)
             }
             Err(_) => Ok(vec![]),
@@ -94,39 +95,18 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
+    use bit_permute::{BitPermuter, Distance, DynBitPermuter};
     use bit_permute_macro::make_permutations;
 
     use super::*;
 
-    make_permutations!(struct_name = "Permutation", f = 32, r = 5, k = 2, w = 32);
+    make_permutations!(struct_name = "Permutations", f = 32, r = 5, k = 2, w = 32);
     // blocks: 7 7 6 6 6
     // mask width: 32 / 5 ; 2 -> 14
 
-    pub struct MyPermuter(Arc<dyn Permutation>);
-
-    impl BitPermuter<Bits, Mask> for MyPermuter {
-        fn apply(&self, key: Bits) -> Bits {
-            self.0.apply(key)
-        }
-
-        fn mask(&self, key: &Bits) -> Mask {
-            self.0.mask(&key)
-        }
-
-        fn dist(&self, key1: &Bits, key2: &Bits) -> u32 {
-            key1.xor_count_ones(key2)
-        }
-
-        fn n_blocks() -> u32 {
-            5
-        }
-    }
-
     #[test]
     fn test_mem_index_search_works() {
-        let mut index = MemIndex::new(MyPermuter(PermutationUtil::get_variant(0)));
+        let mut index = MemIndex::new(Permutations::get_variant(0));
         index
             .insert(&[
                 (Bits::new([0b11111000100010_001000100010001000u32]), 0),

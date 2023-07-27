@@ -2,10 +2,10 @@ use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 
-use hloo::create_permuter;
 use hloo::index::{Index, MemIndex, MemMapIndex};
+use hloo::init_lookup;
 
-create_permuter!(Permuter, 256, 5, 2, 64);
+init_lookup!(LookupUtil, 256, 5, 2, 64);
 
 fn generate_data(n: usize) -> Vec<(Bits, i64)> {
     let mut data = Vec::with_capacity(n);
@@ -37,10 +37,10 @@ fn index_search_comparison(c: &mut Criterion) {
     let target = generate_target(&data, 3);
 
     let tempdir = tempfile::tempdir().unwrap();
-    let mut index1 = MemIndex::new(Permuter::get(3));
+    let mut index1 = MemIndex::new(LookupUtil::get(3));
     println!("inserting data into in-memory...");
     index1.insert(&data).unwrap();
-    let mut index2 = MemMapIndex::new(Permuter::get(3), tempdir.path().join("test-index")).unwrap();
+    let mut index2 = MemMapIndex::new(LookupUtil::get(3), 0, tempdir.path().join("test-index")).unwrap();
     println!("inserting data into mem-mapped...");
     index2.insert(&data).unwrap();
 
@@ -58,17 +58,15 @@ fn search_comparison(c: &mut Criterion) {
     let data = generate_data(1_000_000);
     let target = generate_target(&data, 3);
     println!("inserting data into in-memory...");
-    let mut lookup1 = Permuter::create_mem_lookup::<i64>();
+    let mut lookup1 = LookupUtil::create_mem_lookup::<i64>();
     lookup1.insert(&data).unwrap();
     println!("inserting data into mem-mapped...");
-    let mut lookup2 = Permuter::create_memmap_lookup::<i64>(temp_dir.path()).unwrap();
+    let mut lookup2 = LookupUtil::create_memmap_lookup::<i64>(0, temp_dir.path()).unwrap();
     lookup2.insert(&data).unwrap();
 
     let mut group = c.benchmark_group("search 1M");
 
-    group.bench_function("naive", |b| {
-        b.iter(|| hloo::index::scan_block(&data, &target, 3, |x1, x2| x1.xor_count_ones(x2)))
-    });
+    group.bench_function("naive", |b| b.iter(|| hloo::index::scan_block(&data, &target, 3)));
     group.bench_function("hloo in-memory", |b| b.iter(|| lookup1.search(target, 3)));
     group.bench_function("hloo mem-mapped", |b| b.iter(|| lookup2.search(target, 3)));
 
@@ -83,14 +81,14 @@ fn insert_comparison(c: &mut Criterion) {
 
     group.bench_function("in-memory", |b| {
         b.iter(|| {
-            let mut lookup = Permuter::create_mem_lookup::<i64>();
+            let mut lookup = LookupUtil::create_mem_lookup::<i64>();
             lookup.insert(&data).unwrap();
         })
     });
     group.bench_function("mem-mapped", |b| {
         b.iter(|| {
             let temp_dir = tempfile::tempdir().unwrap();
-            let mut lookup = Permuter::create_memmap_lookup::<i64>(temp_dir.path()).unwrap();
+            let mut lookup = LookupUtil::create_memmap_lookup::<i64>(0, temp_dir.path()).unwrap();
             lookup.insert(&data).unwrap();
         })
     });

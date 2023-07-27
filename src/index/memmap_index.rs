@@ -1,8 +1,9 @@
-use std::{io, marker::PhantomData, path::PathBuf};
+use std::{marker::PhantomData, path::PathBuf};
 
+use bit_permute::Distance;
 use thiserror::Error;
 
-use crate::mmvec::MmVec;
+use crate::mmvec::{MmVec, MmVecError};
 
 use super::{compute_index_stats, scan_block, select_block_at, BitPermuter, Index, SearchResultItem};
 
@@ -10,13 +11,14 @@ use super::{compute_index_stats, scan_block, select_block_at, BitPermuter, Index
 pub enum MemMapIndexError {
     #[error("distance ({distance}) exceeds maximum allowed distance for index ({max})")]
     DistanceExceedsMax { distance: u32, max: u32 },
-    #[error("i/o error: {0}")]
-    IoError(#[from] io::Error),
+    #[error("mmvec error: {0}")]
+    IoError(#[from] MmVecError),
 }
 
 pub struct MemMapIndex<K, V, M, P> {
     permuter: P,
     path: PathBuf,
+    data_signature: u64,
     data: MmVec<(K, V)>,
     mask_type: PhantomData<M>,
 }
@@ -28,11 +30,12 @@ where
     M: Copy + Ord,
     P: BitPermuter<K, M>,
 {
-    pub fn new(permuter: P, path: PathBuf) -> Result<Self, MemMapIndexError> {
+    pub fn new(permuter: P, sig: u64, path: PathBuf) -> Result<Self, MemMapIndexError> {
         Ok(Self {
             permuter,
             path: path.clone(),
-            data: MmVec::with_length_uninit(0, path)?,
+            data_signature: sig,
+            data: MmVec::new_empty(sig, path)?,
             mask_type: Default::default(),
         })
     }
@@ -44,7 +47,7 @@ where
 
 impl<K, V, M, P> Index<K, V, M, P> for MemMapIndex<K, V, M, P>
 where
-    K: Copy + Ord,
+    K: Copy + Distance + Ord,
     V: Copy,
     M: Copy + Ord,
     P: BitPermuter<K, M>,
@@ -55,7 +58,7 @@ where
     where
         Self: Sized,
     {
-        self.data = MmVec::from_path(self.path.clone())?;
+        self.data = MmVec::from_path(self.data_signature, self.path.clone())?;
         Ok(())
     }
 
@@ -75,10 +78,10 @@ where
     }
 
     fn search(&self, key: K, distance: u32) -> Result<Vec<SearchResultItem<V>>, Self::Error> {
-        if distance >= P::n_blocks() {
+        if distance >= self.permuter.n_blocks() {
             return Err(Self::Error::DistanceExceedsMax {
                 distance,
-                max: P::n_blocks(),
+                max: self.permuter.n_blocks(),
             });
         }
         let permuted_key = self.permuter.apply(key);
@@ -89,7 +92,7 @@ where
         match location {
             Ok(pos) => {
                 let block = select_block_at(self.data(), pos, |key| self.permuter.mask(key));
-                let result = scan_block(block, &permuted_key, distance, |k1, k2| self.permuter.dist(k1, k2));
+                let result = scan_block(block, &permuted_key, distance);
                 Ok(result)
             }
             Err(_) => Ok(vec![]),
@@ -103,44 +106,20 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
+    use bit_permute::{BitPermuter, Distance, DynBitPermuter};
     use bit_permute_macro::make_permutations;
 
     use super::*;
 
-    make_permutations!(struct_name = "Permutation", f = 32, r = 5, k = 2, w = 32);
+    make_permutations!(struct_name = "Permutations", f = 32, r = 5, k = 2, w = 32);
     // blocks: 7 7 6 6 6
     // mask width: 32 / 5 ; 2 -> 14
-
-    struct MyPermuter(Arc<dyn Permutation>);
-
-    impl BitPermuter<Bits, Mask> for MyPermuter {
-        fn apply(&self, key: Bits) -> Bits {
-            self.0.apply(key)
-        }
-
-        fn mask(&self, key: &Bits) -> Mask {
-            self.0.mask(&key)
-        }
-
-        fn dist(&self, key1: &Bits, key2: &Bits) -> u32 {
-            key1.xor_count_ones(key2)
-        }
-
-        fn n_blocks() -> u32 {
-            5
-        }
-    }
 
     #[test]
     fn test_memvec_index_search_works() {
         let tempdir = tempfile::tempdir().expect("failed to create temp dir");
-        let mut index = MemMapIndex::new(
-            MyPermuter(PermutationUtil::get_variant(0)),
-            tempdir.path().join("storage.bin"),
-        )
-        .expect("failed to create memory-mapped vector");
+        let mut index = MemMapIndex::new(Permutations::get_variant(0), 0, tempdir.path().join("storage.bin"))
+            .expect("failed to create memory-mapped vector");
         index
             .insert(&[
                 (Bits::new([0b11111000100010_001000100010001000u32]), 0),

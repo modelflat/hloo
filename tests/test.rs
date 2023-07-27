@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
-use hloo::create_permuter;
+use hloo::init_lookup;
 
-create_permuter!(Permuter, 32, 5, 1, 32);
+init_lookup!(LookupUtil, 32, 5, 1, 32);
 // 7 7 6 6 6
 
 fn generate_data(n: usize) -> Vec<(Bits, i64)> {
@@ -28,7 +28,7 @@ fn flip_bits(mut bits: Bits, n: usize) -> Bits {
 
 #[test]
 fn mem_lookup_compiles_and_runs_without_errors() {
-    let mut lookup = Permuter::create_mem_lookup::<i64>();
+    let mut lookup = LookupUtil::create_mem_lookup::<i64>();
     let data = generate_data(1);
     let target = data[0].0;
     lookup.insert(&data).unwrap();
@@ -44,7 +44,7 @@ fn mem_lookup_compiles_and_runs_without_errors() {
 #[test]
 fn memmap_lookup_compiles_and_runs_without_errors() {
     let tmp_path = tempfile::tempdir().unwrap();
-    let mut lookup = Permuter::create_memmap_lookup::<i64>(tmp_path.path()).unwrap();
+    let mut lookup = LookupUtil::create_memmap_lookup::<i64>(0, tmp_path.path()).unwrap();
     let data = generate_data(1);
     let target = data[0].0;
     lookup.insert(&data).expect("failed to insert into memmap index");
@@ -62,11 +62,11 @@ fn memmap_lookup_compiles_and_runs_without_errors() {
 
 #[test]
 fn mem_lookup_works_correctly() {
-    let mut lookup = Permuter::create_mem_lookup::<i64>();
+    let mut lookup = LookupUtil::create_mem_lookup::<i64>();
     let data = generate_data(10);
     let target = flip_bits(data[0].0, 3);
     lookup.insert(&data).unwrap();
-    let expected = hloo::index::scan_block(&data, &target, 5, |x1, x2| x1.xor_count_ones(x2))
+    let expected = hloo::index::scan_block(&data, &target, 5)
         .into_iter()
         .collect::<HashSet<_>>();
     let result = lookup.search(target, 3).unwrap().collect::<HashSet<_>>();
@@ -87,12 +87,12 @@ fn mem_lookup_works_correctly() {
 #[test]
 fn memmap_lookup_works_correctly() {
     let tmp_path = tempfile::tempdir().unwrap();
-    let mut lookup = Permuter::create_memmap_lookup::<i64>(tmp_path.path()).unwrap();
+    let mut lookup = LookupUtil::create_memmap_lookup::<i64>(0, tmp_path.path()).unwrap();
     let data = generate_data(10);
     let target = flip_bits(data[0].0, 3);
     println!("init_data = {:?}", data);
     lookup.insert(&data).unwrap();
-    let expected = hloo::index::scan_block(&data, &target, 5, |x1, x2| x1.xor_count_ones(x2))
+    let expected = hloo::index::scan_block(&data, &target, 5)
         .into_iter()
         .collect::<HashSet<_>>();
     let result = lookup.search(target, 3).unwrap().collect::<HashSet<_>>();
@@ -114,7 +114,7 @@ fn memmap_lookup_works_correctly() {
 fn mem_lookup_single_entry() {
     let init_data = vec![(Bits { data: [851899373] }, 0)];
     let target = init_data[0].0;
-    let mut lookup = Permuter::create_mem_lookup::<i64>();
+    let mut lookup = LookupUtil::create_mem_lookup::<i64>();
     lookup.insert(&init_data).unwrap();
     let result = lookup.search(target, 0).unwrap().collect::<HashSet<_>>();
     assert_eq!(result.len(), 1, "incorrect number of search results!");
@@ -130,13 +130,13 @@ fn naive_results_correspond_to_hloo() {
     let data = generate_data(1000);
     let target = flip_bits(data[0].0, 3);
 
-    let mut lookup_mem = Permuter::create_mem_lookup::<i64>();
+    let mut lookup_mem = LookupUtil::create_mem_lookup::<i64>();
     lookup_mem.insert(&data).unwrap();
     let tmp_path = tempfile::tempdir().unwrap();
-    let mut lookup_map = Permuter::create_memmap_lookup::<i64>(tmp_path.path()).unwrap();
+    let mut lookup_map = LookupUtil::create_memmap_lookup::<i64>(0, tmp_path.path()).unwrap();
     lookup_map.insert(&data).unwrap();
 
-    let expected = hloo::index::scan_block(&data, &target, 3, |x1, x2| x1.xor_count_ones(x2))
+    let expected = hloo::index::scan_block(&data, &target, 3)
         .into_iter()
         .collect::<HashSet<_>>();
 

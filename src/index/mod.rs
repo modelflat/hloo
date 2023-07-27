@@ -3,7 +3,8 @@ mod memmap_index;
 
 use std::hash::Hash;
 
-pub use mem_index::{MemIndex, MemoryIndexError};
+use bit_permute::{BitPermuter, Distance};
+pub use mem_index::{MemIndex, MemIndexError};
 pub use memmap_index::{MemMapIndex, MemMapIndexError};
 
 #[derive(Clone, Copy, Eq, Debug)]
@@ -44,19 +45,19 @@ where
     }
 }
 
-pub trait BitPermuter<K, M> {
-    /// Apply permutation to bit sequence `key`.
-    fn apply(&self, key: K) -> K;
+// pub trait BitPermuter<K, M> {
+//     /// Apply permutation to bit sequence `key`.
+//     fn apply(&self, key: K) -> K;
 
-    /// Apply mask to bit sequence `key`.
-    fn mask(&self, key: &K) -> M;
+//     /// Apply mask to bit sequence `key`.
+//     fn mask(&self, key: &K) -> M;
 
-    /// Compute distance between `key1` and `key2`.
-    fn dist(&self, key1: &K, key2: &K) -> u32;
+//     /// Compute distance between `key1` and `key2`.
+//     fn dist(&self, key1: &K, key2: &K) -> u32;
 
-    /// Get number of blocks this permuter operates on
-    fn n_blocks() -> u32;
-}
+//     /// Get number of blocks this permuter operates on
+//     fn n_blocks() -> u32;
+// }
 
 pub trait Index<K, V, M, P>
 where
@@ -145,18 +146,14 @@ where
     &data[start..=end]
 }
 
-pub fn scan_block<K, V>(
-    data: &[(K, V)],
-    key: &K,
-    distance_threshold: u32,
-    distance_fn: impl Fn(&K, &K) -> u32,
-) -> Vec<SearchResultItem<V>>
+pub fn scan_block<K, V>(data: &[(K, V)], key: &K, distance_threshold: u32) -> Vec<SearchResultItem<V>>
 where
+    K: Distance,
     V: Clone,
 {
     data.iter()
         .filter_map(move |(this_key, value)| {
-            let dist = distance_fn(this_key, key);
+            let dist = this_key.xor_dist(key);
             if dist <= distance_threshold {
                 Some(SearchResultItem::new(value.clone(), dist))
             } else {
@@ -168,6 +165,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use bit_permute::Distance;
+
     use crate::index::{scan_block, SearchResultItem};
 
     use super::{compute_index_stats, select_block_at};
@@ -176,22 +175,30 @@ mod tests {
         *x
     }
 
+    struct MyKey(u32);
+
+    impl Distance for MyKey {
+        fn xor_dist(&self, other: &Self) -> u32 {
+            self.0.abs_diff(other.0)
+        }
+    }
+
     #[test]
     fn test_scan_block_works_correctly() {
         let data = vec![
-            (1u32, 0),
-            (2u32, 1),
-            (2u32, 2),
-            (3u32, 3),
-            (4u32, 4),
-            (4u32, 5),
-            (4u32, 6),
+            (MyKey(1u32), 0),
+            (MyKey(2u32), 1),
+            (MyKey(2u32), 2),
+            (MyKey(3u32), 3),
+            (MyKey(4u32), 4),
+            (MyKey(4u32), 5),
+            (MyKey(4u32), 6),
         ];
 
-        let res = scan_block(&data, &1, 0, |k1, k2| k1.abs_diff(*k2));
+        let res = scan_block(&data, &MyKey(1), 0);
         assert_eq!(res.len(), 1, "pos 0");
         assert_eq!(res, vec![SearchResultItem::new(0, 0)], "pos 0 - data");
-        let res = scan_block(&data, &1, 1, |k1, k2| k1.abs_diff(*k2));
+        let res = scan_block(&data, &MyKey(1), 1);
         assert_eq!(res.len(), 3, "pos 0-2");
         assert_eq!(
             res,

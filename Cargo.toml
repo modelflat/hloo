@@ -10,7 +10,6 @@ members = ["bit_permute", "bit_permute_macro"]
 bit_permute = { path = "bit_permute" }
 bit_permute_macro = { path = "bit_permute_macro" }
 memmap2 = "0.5"
-crc32fast = "1"
 tempfile = "3"
 thiserror = "1"
 

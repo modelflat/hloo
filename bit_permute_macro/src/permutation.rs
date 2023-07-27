@@ -62,12 +62,13 @@ impl ToTokens for Permutation<'_> {
         let struct_name = &self.struct_name;
         let data_type_name = self.data_type_name;
         let mask_type_name = self.mask_type_name;
+        let n_blocks = self.perm.blocks().len();
 
         let code = quote! {
             #[derive(Clone, Copy)]
-            pub struct #struct_name {}
+            pub struct #struct_name;
 
-            impl Permutation for #struct_name {
+            impl BitPermuter<#data_type_name, #mask_type_name> for #struct_name {
                 fn apply(&self, w: #data_type_name) -> #data_type_name {
                     let mut nw: #data_type_name = Default::default();
                     #(#apply_ops);*;
@@ -84,6 +85,10 @@ impl ToTokens for Permutation<'_> {
                     let mut nw: #mask_type_name = Default::default();
                     #(#mask_ops);*;
                     nw
+                }
+
+                fn n_blocks(&self) -> u32 {
+                    #n_blocks as u32
                 }
             }
         };

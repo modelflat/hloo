@@ -1,43 +1,28 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 
+use bit_permute::{BitPermuter, Distance, DynBitPermuter};
 use bit_permute_macro::make_permutations;
 
-make_permutations!(struct_name = "Permutation", f = 256, r = 5, k = 2);
-
-fn generate_data(n: usize) -> Vec<Bits> {
-    let mut data = Vec::with_capacity(n);
-    for _ in 0..n {
-        data.push(Bits::new([
-            rand::random(),
-            rand::random(),
-            rand::random(),
-            rand::random(),
-        ]));
-    }
-    data
-}
+make_permutations!(struct_name = "Permutations", f = 256, r = 5, k = 2, w = 64);
 
 fn apply_bench(c: &mut Criterion) {
-    let data = generate_data(1 << 10);
+    let data = Bits::new(rand::random());
+    let mut group = c.benchmark_group("apply");
     for i in 0..10 {
-        let permutation = PermutationUtil::get_variant(i);
-
-        c.bench_function(&format!("permutation.apply {}", i), |b| {
-            b.iter(|| permutation.apply(data[0]))
-        });
+        let permutation = Permutations::get_variant(i);
+        group.bench_function(&format!("{}", i), |b| b.iter(|| permutation.apply(data)));
     }
+    group.finish();
 }
 
 fn mask_bench(c: &mut Criterion) {
-    let data = generate_data(1 << 10);
-
+    let data = Bits::new(rand::random());
+    let mut group = c.benchmark_group("mask");
     for i in 0..10 {
-        let permutation = PermutationUtil::get_variant(i);
-
-        c.bench_function(&format!("permutation.mask {}", i), |b| {
-            b.iter(|| permutation.mask(&data[0]))
-        });
+        let permutation = Permutations::get_variant(i);
+        group.bench_function(&format!("{}", i), |b| b.iter(|| permutation.mask(&data)));
     }
+    group.finish();
 }
 
 criterion_group!(benches, apply_bench, mask_bench);

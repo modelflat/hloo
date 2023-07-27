@@ -105,17 +105,19 @@ impl ToTokens for Bits<'_> {
                     Self::new(data)
                 }
 
-                pub fn xor_count_ones(&self, other: &#type_name) -> u32 {
-                    let mut result = 0;
-                    #(result += (self.data[#word_range_xor] ^ other.data[#word_range_xor]).count_ones());*;
-                    result
-                }
-
                 pub fn to_string(&self) -> String {
                     let mut result = String::with_capacity(#byte_size * 2);
                     for part in self.data {
                         result.push_str(&format!("{:016X}", part))
                     }
+                    result
+                }
+            }
+
+            impl Distance for #type_name {
+                fn xor_dist(&self, other: &Self) -> u32 {
+                    let mut result = 0;
+                    #(result += (self.data[#word_range_xor] ^ other.data[#word_range_xor]).count_ones());*;
                     result
                 }
             }

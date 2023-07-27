@@ -37,12 +37,10 @@ pub fn make_permutations(item: TokenStream) -> TokenStream {
         "word size {} is not supported",
         word_bits
     );
-    let n_blocks = params.r;
     let n_words = params.f / word_bits;
     assert!(params.f % word_bits == 0 && n_words > 0);
 
     let struct_name = params.struct_name;
-    let util_struct_name = format_ident!("{}Util", struct_name);
     let data_type_name = format_ident!("Bits");
     let mask_type_name = format_ident!("Mask");
     let word_type_name = format_ident!("u{}", word_bits);
@@ -74,46 +72,30 @@ pub fn make_permutations(item: TokenStream) -> TokenStream {
     let all_variants_range = variants_range.clone();
 
     quote! {
-        pub use __permutations::{#data_type_name, #mask_type_name, #struct_name, #util_struct_name};
+        #bits_definition
 
-        mod __permutations {
-            #bits_definition
+        #mask_definition
 
-            #mask_definition
+        pub struct #struct_name;
 
-            pub trait #struct_name: Send + Sync {
-                fn apply(&self, w: #data_type_name) -> #data_type_name;
-
-                fn revert(&self, w: #data_type_name) -> #data_type_name;
-
-                fn mask(&self, w: &#data_type_name) -> #mask_type_name;
-            }
-
-            pub struct #util_struct_name;
-
-            impl #util_struct_name {
-                pub fn n_blocks() -> usize {
-                    #n_blocks
-                }
-
-                #[inline(always)]
-                pub fn get_variant(variant: usize) -> std::sync::Arc<dyn #struct_name> {
-                    match variant {
-                        #( #variants_range => std::sync::Arc::new(#variants {}) as std::sync::Arc<dyn #struct_name> ),*,
-                        i => panic!("permutation variant out of range: {}", i),
-                    }
-                }
-
-                #[inline(always)]
-                pub fn get_all_variants() -> Vec<std::sync::Arc<dyn #struct_name>> {
-                    vec![
-                        #( Self::get_variant(#all_variants_range) ),*
-                    ]
+        impl #struct_name {
+            #[inline(always)]
+            pub fn get_variant(variant: usize) -> DynBitPermuter<#data_type_name, #mask_type_name> {
+                match variant {
+                    #( #variants_range => DynBitPermuter(std::sync::Arc::new(#variants {}) as std::sync::Arc<dyn BitPermuter<#data_type_name, #mask_type_name>>) ),*,
+                    i => panic!("permutation variant out of range: {}", i),
                 }
             }
 
-            #(#perms_definitions)*
+            #[inline(always)]
+            pub fn get_all_variants() -> Vec<DynBitPermuter<#data_type_name, #mask_type_name>> {
+                vec![
+                    #( Self::get_variant(#all_variants_range) ),*
+                ]
+            }
         }
+
+        #(#perms_definitions)*
     }
     .into()
 }

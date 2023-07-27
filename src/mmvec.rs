@@ -7,8 +7,19 @@ use std::{
 };
 
 use memmap2::{MmapMut, MmapOptions};
+use thiserror::Error;
 
 use crate::util::merge_sorted;
+
+#[derive(Debug, Error)]
+pub enum MmVecError {
+    #[error("signature does not match: expected: {expected}, got: {actual} ")]
+    SignatureMismatch { expected: u64, actual: u64 },
+    #[error("loading vectors which are not fully initialized or have trailing data in the file is not supported!")]
+    UninitializedVectorLoad {},
+    #[error("i/o error: {0}")]
+    IoError(#[from] std::io::Error),
+}
 
 pub struct MmVec<T> {
     data: Data<T>,
@@ -24,41 +35,41 @@ where
     }
 
     /// Creates an uninitialized vector with given length.
-    pub fn with_length_uninit(len: usize, path: PathBuf) -> io::Result<Self> {
+    unsafe fn with_length_uninit(sig: u64, len: usize, path: PathBuf) -> Result<Self, MmVecError> {
         let file = create_new_file(&path)?;
         // SAFETY: we just created this file
-        let data = unsafe { Data::new_uninit(file, len)? };
+        let data = unsafe { Data::new_uninit(file, sig, len as u64)? };
         Ok(Self::new(data, path))
+    }
+
+    pub fn new_empty(sig: u64, path: PathBuf) -> Result<Self, MmVecError> {
+        unsafe { Self::with_length_uninit(sig, 0, path) }
     }
 
     /// Dumps a regular in-memory vector into path, then mmaps it.
-    pub fn from_vec(vec: Vec<T>, path: PathBuf) -> io::Result<Self> {
+    pub fn from_vec(sig: u64, vec: Vec<T>, path: PathBuf) -> Result<Self, MmVecError> {
         let file = create_new_file(&path)?;
         // SAFETY: we just created this file
-        let data = unsafe { Data::new_with_data(file, &vec)? };
+        let data = unsafe { Data::new_with_data(file, sig, &vec)? };
         Ok(Self::new(data, path))
     }
 
-    /// Creates a vector from the given path.
-    pub fn from_path(path: PathBuf) -> io::Result<Self> {
+    /// Try to create a vector from the given path. Panic if the signature does not match
+    pub fn from_path(sig: u64, path: PathBuf) -> Result<Self, MmVecError> {
         let file = open_file(&path)?;
         // SAFETY: we are going to check the data
         let data = unsafe {
             let data = Data::<T>::from_file_unchecked(file)?;
-            // TODO proper signature check depending on type T, and possibly CRC
-            assert!(
-                data.sig() == 0,
-                "vector at {}: signature does not match requested type!",
-                path.display()
-            );
+            if data.sig() != sig {
+                return Err(MmVecError::SignatureMismatch {
+                    expected: sig,
+                    actual: data.sig(),
+                });
+            }
             // only whole-file, fully initialized vectors are supported
-            assert!(
-                data.len() == data.capacity() as u64,
-                "vector at {}: has trailing data! len {}, cap {}",
-                path.display(),
-                data.len(),
-                data.capacity(),
-            );
+            if data.len() != data.capacity() as u64 {
+                return Err(MmVecError::UninitializedVectorLoad {});
+            }
             data
         };
         Ok(Self::new(data, path))
@@ -74,6 +85,12 @@ where
     #[must_use]
     pub fn len(&self) -> usize {
         unsafe { self.data.len() as usize }
+    }
+
+    /// Returns the signature of the vector.
+    #[must_use]
+    pub fn sig(&self) -> u64 {
+        unsafe { self.data.sig() }
     }
 
     /// Whether this vector is empty.
@@ -97,12 +114,13 @@ where
     }
 
     /// Flushes memory-mapped data into file.
-    pub fn flush(&self) -> io::Result<()> {
-        self.data.flush()
+    pub fn flush(&self) -> Result<(), MmVecError> {
+        self.data.flush()?;
+        Ok(())
     }
 
     /// Copies self into path, and returns a new vector at this path.
-    pub fn copy_to(&self, path: PathBuf) -> io::Result<Self> {
+    pub fn copy_to(&self, path: PathBuf) -> Result<Self, MmVecError> {
         self.flush()?;
         fs::copy(&self.path, &path)?;
 
@@ -113,7 +131,7 @@ where
     }
 
     /// Moves self into path, and returns a new vector at this path.
-    pub fn move_to(self, path: PathBuf) -> io::Result<Self> {
+    pub fn move_to(self, path: PathBuf) -> Result<Self, MmVecError> {
         self.flush()?;
         fs::rename(&self.path, &path)?;
         drop(self);
@@ -125,35 +143,34 @@ where
     }
 
     /// Map the existing vector into a new one at `Path`, with indexes.
-    pub fn map_with_index<O, F>(&self, f: F, path: PathBuf) -> io::Result<MmVec<O>>
+    pub fn map_with_index<F>(&self, f: F, path: PathBuf) -> Result<Self, MmVecError>
     where
-        F: Fn(usize, T) -> O,
-        O: Copy,
+        F: Fn(usize, T) -> T,
     {
-        let mut target = MmVec::with_length_uninit(self.len(), path)?;
         // SAFETY: this is safe because both vectors are valid
-        unsafe {
+        let mapped = unsafe {
+            let mut dst = Self::with_length_uninit(self.sig(), self.len(), path)?;
             let src_slice = self.as_slice();
-            let dst_slice = target.as_slice_mut();
+            let dst_slice = dst.as_slice_mut();
             for (idx, el) in src_slice.iter().enumerate() {
                 dst_slice[idx] = f(idx, *el);
             }
-        }
-        Ok(target)
+            dst
+        };
+        Ok(mapped)
     }
 
     /// Map the existing vector into a new one at `Path`.
     #[inline]
-    pub fn map<O, F>(&self, f: F, path: PathBuf) -> io::Result<MmVec<O>>
+    pub fn map<F>(&self, f: F, path: PathBuf) -> Result<Self, MmVecError>
     where
-        F: Fn(T) -> O,
-        O: Copy,
+        F: Fn(T) -> T,
     {
         self.map_with_index(|_, el| f(el), path)
     }
 
     ///  Merge self and other into a single vector, in-place. Both vectors should be sorted!
-    pub fn merge_sorted<O, F>(&mut self, other: &[T], sort_key: F) -> io::Result<()>
+    pub fn merge_sorted<O, F>(&mut self, other: &[T], sort_key: F) -> Result<(), MmVecError>
     where
         F: Fn(T) -> O,
         O: Ord,
@@ -167,15 +184,19 @@ where
     }
 
     /// Merge self and other into a single vector. Both vectors should be sorted!
-    pub fn merge_sorted_into_path<O, F>(&self, other: &[T], sort_key: F, path: PathBuf) -> io::Result<Self>
+    pub fn merge_sorted_into_path<O, F>(&self, other: &[T], sort_key: F, path: PathBuf) -> Result<Self, MmVecError>
     where
         F: Fn(T) -> O,
         O: Ord,
     {
         let new_size = self.len() + other.len();
-        let mut merged = Self::with_length_uninit(new_size, path)?;
+
         // SAFETY: this is safe because both vectors are valid
-        unsafe { merge_sorted(self.as_slice(), other, merged.as_slice_mut(), sort_key) };
+        let merged = unsafe {
+            let mut dst = Self::with_length_uninit(self.sig(), new_size, path)?;
+            merge_sorted(self.as_slice(), other, dst.as_slice_mut(), sort_key);
+            dst
+        };
 
         Ok(merged)
     }
@@ -212,21 +233,12 @@ impl<T> Data<T> {
         (self.header_mmap.as_ptr() as *const u8).add(offset)
     }
 
-    pub unsafe fn sig(&self) -> u32 {
-        *(self.header_offset(0) as *const u32)
+    pub unsafe fn sig(&self) -> u64 {
+        *(self.header_offset(0) as *const u64)
     }
 
-    unsafe fn set_sig(&mut self, sig: u32) {
-        *(self.header_offset(0) as *mut u32) = sig;
-    }
-
-    #[allow(unused)]
-    pub unsafe fn crc(&self) -> u32 {
-        *(self.header_offset(4) as *const u32)
-    }
-
-    unsafe fn set_crc(&mut self, crc: u32) {
-        *(self.header_offset(4) as *mut u32) = crc;
+    unsafe fn set_sig(&mut self, sig: u64) {
+        *(self.header_offset(0) as *mut u64) = sig;
     }
 
     pub unsafe fn len(&self) -> u64 {
@@ -268,28 +280,25 @@ impl<T> Data<T> {
         })
     }
 
-    pub unsafe fn new_uninit(file: File, len: usize) -> io::Result<Self> {
-        let needed_bytes = len * std::mem::size_of::<T>();
-        file.set_len(Self::HEADER_SIZE + needed_bytes as u64)?;
+    pub unsafe fn new_uninit(file: File, sig: u64, len: u64) -> io::Result<Self> {
+        let needed_bytes = std::mem::size_of::<T>() as u64 * len;
+        file.set_len(Self::HEADER_SIZE + needed_bytes)?;
         let mut data = Self::from_file_unchecked(file)?;
-        data.set_sig(0);
-        data.set_crc(0);
-        data.set_len(len as u64);
+        data.set_sig(sig);
+        data.set_len(len);
         data.header_mmap.flush()?;
         Ok(data)
     }
 
-    pub unsafe fn new_with_data(mut file: File, data: &[T]) -> io::Result<Self> {
+    pub unsafe fn new_with_data(mut file: File, sig: u64, data: &[T]) -> io::Result<Self> {
         let len = data.len();
         let bytes = slice_as_bytes(data);
-        let crc = crc32fast::hash(bytes);
         file.set_len(Self::HEADER_SIZE + bytes.len() as u64)?;
         file.seek(io::SeekFrom::Start(Self::HEADER_SIZE))?;
         file.write_all(bytes)?;
         file.flush()?;
         let mut data = Self::from_file_unchecked(file)?;
-        data.set_sig(0);
-        data.set_crc(crc);
+        data.set_sig(sig);
         data.set_len(len as u64);
         data.header_mmap.flush()?;
         Ok(data)
@@ -352,21 +361,17 @@ mod tests {
         let test_path = tmp.path().join("test.mmvec");
         unsafe {
             let file = create_new_file(&test_path).unwrap();
-            let mut data = Data::<u64>::new_uninit(file, 100).expect("failed to create data");
-            assert_eq!(data.sig(), 0, "uninit sig should be 0!");
-            assert_eq!(data.crc(), 0, "uninit crc should be 0!");
+            let mut data = Data::<u64>::new_uninit(file, 42, 100).expect("failed to create data");
+            assert_eq!(data.sig(), 42, "sig should be 42!");
             assert_eq!(data.len(), 100, "len should be 100!");
             data.set_sig(129);
             assert_eq!(data.sig(), 129, "data sig cannot be set correctly!");
-            data.set_crc(345);
-            assert_eq!(data.crc(), 345, "data crc cannot be set correctly!");
 
             drop(data);
 
             let file = open_file(&test_path).unwrap();
             let data = Data::<u64>::from_file_unchecked(file).expect("failed to create data");
             assert_eq!(data.sig(), 129, "sig is not preserved!");
-            assert_eq!(data.crc(), 345, "crc is not preserved!");
             assert_eq!(data.len(), 100, "len is not preserved!");
         }
     }
@@ -376,19 +381,9 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let test_path = tmp.path().join("test.mmvec");
         let data = vec![(199, 200), (200, 532), (449, 400)];
-        let vec = MmVec::from_vec(data.clone(), test_path.clone()).expect("failed to create memvec");
+        let vec = MmVec::from_vec(0, data.clone(), test_path.clone()).expect("failed to create memvec");
         drop(vec);
-        let result = MmVec::<(i32, i32)>::from_path(test_path).expect("failed to load memvec from file");
+        let result = MmVec::<(i32, i32)>::from_path(0, test_path).expect("failed to load memvec from file");
         assert_eq!(unsafe { result.as_slice() }, data.as_slice(), "data was corrupted");
-    }
-
-    #[test]
-    fn test_with_length_uninitialized_works_correctly() {
-        let tmp = tempfile::tempdir().unwrap();
-        let test_path = tmp.path().join("test.mmvec");
-        let vec = MmVec::<(i32, i32)>::with_length_uninit(100, test_path.clone()).expect("failed to create memvec");
-        drop(vec);
-        let result = MmVec::<(i32, i32)>::from_path(test_path).expect("failed to load memvec from file");
-        assert_eq!(result.len(), 100, "data was corrupted");
     }
 }

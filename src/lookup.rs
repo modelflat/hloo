@@ -1,6 +1,8 @@
 use std::marker::PhantomData;
 
-use crate::index::{BitPermuter, Index, SearchResultItem};
+use bit_permute::BitPermuter;
+
+use crate::index::{Index, SearchResultItem};
 
 pub struct Lookup<K, V, M, P, I> {
     indexes: Vec<I>,
