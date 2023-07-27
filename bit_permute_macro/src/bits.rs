@@ -1,7 +1,9 @@
-use darling::{FromMeta, ToTokens};
+use darling::{
+    export::syn::{Type, TypeArray},
+    FromMeta, ToTokens,
+};
 use proc_macro2::Ident;
 use quote::{format_ident, quote};
-use syn::{Type, TypeArray};
 
 pub struct Bits<'a> {
     type_name: &'a Ident,

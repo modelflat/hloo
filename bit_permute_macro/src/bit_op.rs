@@ -1,5 +1,5 @@
+use darling::export::syn::Ident;
 use quote::{quote, ToTokens};
-use syn::Ident;
 
 pub struct BitOp<'a> {
     pub op: bit_permute::BitOp,

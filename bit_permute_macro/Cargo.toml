@@ -6,19 +6,20 @@ edition = "2021"
 [lib]
 proc-macro = true
 
+[dependencies]
+bit_permute = { path = "../bit_permute" }
+darling = "0.20"
+proc-macro2 = "1"
+quote = "1"
+
+[dev-dependencies]
+rand = "0.8"
+
+[dev-dependencies.criterion]
+version = "0.5"
+default-features = false
+features = ["cargo_bench_support", "html_reports"]
+
 [[bench]]
 name = "permutations"
 harness = false
-
-[dependencies]
-syn = "1"
-quote = "1"
-proc-macro2 = "1"
-darling = "0.14"
-itertools = "0.10"
-bit_permute = { path = "../bit_permute" }
-
-[dev-dependencies]
-criterion = "0.4"
-rand = "*"
-bitvec = "1"

@@ -1,4 +1,4 @@
-use itertools::Itertools;
+use rand::random;
 
 use bit_permute::{BitPermuter, Distance, DynBitPermuter};
 use bit_permute_macro::make_permutations;
@@ -31,7 +31,10 @@ fn apply_works_correctly() {
     assert_eq!(Permutations::get_all_variants().len(), 10);
     for (pi, perm) in Permutations::get_all_variants().iter().enumerate() {
         let res = perm.apply(bits);
-        let found = expected.iter().find_position(|mask| res.data[0] & **mask == **mask);
+        let found = expected
+            .iter()
+            .enumerate()
+            .find(|(_, mask)| res.data[0] & **mask == **mask);
         if let Some((i, _)) = found {
             expected.remove(i);
         } else {
@@ -109,7 +112,7 @@ fn apply_works_correctly_with_rest_ordering_preserved() {
     assert_eq!(Permutations::get_all_variants().len(), 10);
     for (pi, perm) in Permutations::get_all_variants().iter().enumerate() {
         let res = perm.apply(bits);
-        let found = expected.iter().find_position(|val| res.data == **val);
+        let found = expected.iter().enumerate().find(|(_, val)| res.data == **val);
         if let Some((i, _)) = found {
             expected.remove(i);
         } else {
@@ -123,7 +126,7 @@ fn apply_works_correctly_with_rest_ordering_preserved() {
 fn apply_then_revert_is_identity() {
     make_permutations!(struct_name = "Permutations", f = 64, r = 5, k = 2, w = 32);
 
-    let bits = Bits::new([rand::random(), rand::random()]);
+    let bits = Bits::new(random());
     for (i, perm) in Permutations::get_all_variants().iter().enumerate() {
         let permuted = perm.apply(bits);
         let reverted = perm.revert(permuted);
@@ -159,7 +162,7 @@ fn mask_works_correctly() {
 
     for (pi, perm) in Permutations::get_all_variants().iter().enumerate() {
         let res = perm.mask(&bits);
-        let found = expected.iter().find_position(|mask| res.data[0] == **mask);
+        let found = expected.iter().enumerate().find(|(_, mask)| res.data[0] == **mask);
         if let Some((i, _)) = found {
             expected.remove(i);
         } else {

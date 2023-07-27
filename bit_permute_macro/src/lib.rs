@@ -5,10 +5,12 @@ mod permutation;
 extern crate proc_macro;
 
 use bit_permute::create_permutations;
-use darling::FromMeta;
+use darling::{
+    export::{syn::Ident, NestedMeta},
+    Error, FromMeta,
+};
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, AttributeArgs, Ident};
 
 use crate::{bits::Bits, permutation::Permutation};
 
@@ -23,11 +25,16 @@ struct PermutationParams {
 
 #[proc_macro]
 pub fn make_permutations(item: TokenStream) -> TokenStream {
-    let attr_args = parse_macro_input!(item as AttributeArgs);
+    let attr_args = match NestedMeta::parse_meta_list(item.into()) {
+        Ok(v) => v,
+        Err(e) => {
+            return TokenStream::from(Error::from(e).write_errors());
+        }
+    };
     let params = match PermutationParams::from_list(&attr_args) {
         Ok(v) => v,
         Err(e) => {
-            return TokenStream::from(e.write_errors());
+            return TokenStream::from(Error::from(e).write_errors());
         }
     };
 

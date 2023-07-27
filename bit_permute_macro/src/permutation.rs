@@ -1,6 +1,5 @@
-use darling::ToTokens;
+use darling::{export::syn::Ident, ToTokens};
 use quote::quote;
-use syn::Ident;
 
 use crate::bit_op::BitOp;
 
