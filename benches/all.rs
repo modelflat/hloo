@@ -31,17 +31,9 @@ fn generate_target(data: &[(Bits, i64)], change_bits: usize) -> Bits {
     target
 }
 
-fn generate_medium() -> Vec<(Bits, i64)> {
-    generate_data(10_000_000)
-}
-
-fn generate_small() -> Vec<(Bits, i64)> {
-    generate_data(100_000)
-}
-
 fn index_search_comparison(c: &mut Criterion) {
     println!("preparing data...");
-    let data = generate_medium();
+    let data = generate_data(1_000_000);
     let target = generate_target(&data, 3);
 
     let tempdir = tempfile::tempdir().unwrap();
@@ -52,7 +44,7 @@ fn index_search_comparison(c: &mut Criterion) {
     println!("inserting data into mem-mapped...");
     index2.insert(&data).unwrap();
 
-    let mut group = c.benchmark_group("single index - search 10_000_000");
+    let mut group = c.benchmark_group("single index - search 1M");
 
     group.bench_function("in-memory", |b| b.iter(|| index1.search(target, 3)));
     group.bench_function("mem-mapped", |b| b.iter(|| index2.search(target, 3)));
@@ -63,7 +55,7 @@ fn index_search_comparison(c: &mut Criterion) {
 fn search_comparison(c: &mut Criterion) {
     let temp_dir = tempfile::tempdir().unwrap();
     println!("preparing data...");
-    let data = generate_medium();
+    let data = generate_data(1_000_000);
     let target = generate_target(&data, 3);
     println!("inserting data into in-memory...");
     let mut lookup1 = Permuter::create_mem_lookup::<i64>();
@@ -72,7 +64,7 @@ fn search_comparison(c: &mut Criterion) {
     let mut lookup2 = Permuter::create_memmap_lookup::<i64>(temp_dir.path()).unwrap();
     lookup2.insert(&data).unwrap();
 
-    let mut group = c.benchmark_group("search 10_000_000");
+    let mut group = c.benchmark_group("search 1M");
 
     group.bench_function("naive", |b| {
         b.iter(|| hloo::index::scan_block(&data, &target, 3, |x1, x2| x1.xor_count_ones(x2)))
@@ -85,9 +77,9 @@ fn search_comparison(c: &mut Criterion) {
 
 fn insert_comparison(c: &mut Criterion) {
     println!("preparing data...");
-    let data = generate_small();
+    let data = generate_data(100_000);
 
-    let mut group = c.benchmark_group("create + insert 100_000");
+    let mut group = c.benchmark_group("create + insert 100k");
 
     group.bench_function("in-memory", |b| {
         b.iter(|| {
