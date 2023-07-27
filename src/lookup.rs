@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::{index::SearchResultItem, BitPermuter, Index};
+use crate::index::{BitPermuter, Index, SearchResultItem};
 
 pub struct Lookup<K, V, M, P, I> {
     indexes: Vec<I>,
@@ -19,6 +19,10 @@ where
             indexes,
             _dummy: Default::default(),
         }
+    }
+
+    pub fn indexes(&self) -> &[I] {
+        &self.indexes
     }
 
     pub fn insert(&mut self, items: &[(K, V)]) -> Result<(), I::Error> {

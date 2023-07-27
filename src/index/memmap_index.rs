@@ -1,8 +1,18 @@
 use std::{io, marker::PhantomData, path::PathBuf};
 
+use thiserror::Error;
+
 use crate::mmvec::MmVec;
 
 use super::{compute_index_stats, scan_block, select_block_at, BitPermuter, Index, SearchResultItem};
+
+#[derive(Debug, Error)]
+pub enum MemMapIndexError {
+    #[error("distance ({distance}) exceeds maximum allowed distance for index ({max})")]
+    DistanceExceedsMax { distance: u32, max: u32 },
+    #[error("i/o error: {0}")]
+    IoError(#[from] io::Error),
+}
 
 pub struct MemMapIndex<K, V, M, P> {
     permuter: P,
@@ -18,7 +28,7 @@ where
     M: Copy + Ord,
     P: BitPermuter<K, M>,
 {
-    pub fn new(permuter: P, path: PathBuf) -> Result<Self, io::Error> {
+    pub fn new(permuter: P, path: PathBuf) -> Result<Self, MemMapIndexError> {
         Ok(Self {
             permuter,
             path: path.clone(),
@@ -27,7 +37,7 @@ where
         })
     }
 
-    fn as_slice(&self) -> &[(K, V)] {
+    pub fn data(&self) -> &[(K, V)] {
         unsafe { self.data.as_slice() }
     }
 }
@@ -39,7 +49,7 @@ where
     M: Copy + Ord,
     P: BitPermuter<K, M>,
 {
-    type Error = io::Error;
+    type Error = MemMapIndexError;
 
     fn load(&mut self) -> Result<(), Self::Error>
     where
@@ -53,7 +63,8 @@ where
     where
         Self: Sized,
     {
-        self.data.flush()
+        self.data.flush()?;
+        Ok(())
     }
 
     fn insert(&mut self, items: &[(K, V)]) -> Result<(), Self::Error> {
@@ -64,22 +75,29 @@ where
     }
 
     fn search(&self, key: K, distance: u32) -> Result<Vec<SearchResultItem<V>>, Self::Error> {
-        let data = self.as_slice();
+        if distance >= P::n_blocks() {
+            return Err(Self::Error::DistanceExceedsMax {
+                distance,
+                max: P::n_blocks(),
+            });
+        }
         let permuted_key = self.permuter.apply(key);
         let masked_key = self.permuter.mask(&permuted_key);
-        let block = self
-            .data
-            .binary_search_by_key(&masked_key, |(key, _)| self.permuter.mask(key))
-            .map_or_else(
-                |_| &data[0..0],
-                |pos| select_block_at(data, pos, |key| self.permuter.mask(key)),
-            );
-        let result = scan_block(block, &permuted_key, distance, |k1, k2| self.permuter.dist(k1, k2));
-        Ok(result)
+        let location = self
+            .data()
+            .binary_search_by_key(&masked_key, |(key, _)| self.permuter.mask(key));
+        match location {
+            Ok(pos) => {
+                let block = select_block_at(self.data(), pos, |key| self.permuter.mask(key));
+                let result = scan_block(block, &permuted_key, distance, |k1, k2| self.permuter.dist(k1, k2));
+                Ok(result)
+            }
+            Err(_) => Ok(vec![]),
+        }
     }
 
     fn stats(&self) -> super::IndexStats {
-        compute_index_stats(self.as_slice(), |key| self.permuter.mask(key))
+        compute_index_stats(self.data(), |key| self.permuter.mask(key))
     }
 }
 
@@ -108,6 +126,10 @@ mod tests {
 
         fn dist(&self, key1: &Bits, key2: &Bits) -> u32 {
             key1.xor_count_ones(key2)
+        }
+
+        fn n_blocks() -> u32 {
+            5
         }
     }
 

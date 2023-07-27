@@ -9,5 +9,5 @@ Below are the results from benchmarking `hloo` against the naive full-scan. Resu
 |lookup method|avg time per query|speedup|
 |-|-|-|
 |naive|10.664 ms|-|
-|hloo (in-memory index)|607.02 ns|x17568|
-|hloo (memory-mapped index)|573.40 ns|x18598|
+|hloo (in-memory index)|635 ns|x16794|
+|hloo (memory-mapped index)|641 ns|x16636|

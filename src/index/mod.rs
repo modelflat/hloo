@@ -1,7 +1,10 @@
-pub mod memmap_index;
-pub mod memory_index;
+mod mem_index;
+mod memmap_index;
 
 use std::hash::Hash;
+
+pub use mem_index::{MemIndex, MemoryIndexError};
+pub use memmap_index::{MemMapIndex, MemMapIndexError};
 
 #[derive(Clone, Copy, Eq, Debug)]
 pub struct SearchResultItem<V> {
@@ -50,6 +53,9 @@ pub trait BitPermuter<K, M> {
 
     /// Compute distance between `key1` and `key2`.
     fn dist(&self, key1: &K, key2: &K) -> u32;
+
+    /// Get number of blocks this permuter operates on
+    fn n_blocks() -> u32;
 }
 
 pub trait Index<K, V, M, P>
@@ -162,10 +168,40 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::index::{scan_block, SearchResultItem};
+
     use super::{compute_index_stats, select_block_at};
 
     fn id<T: Copy + Ord>(x: &T) -> T {
         *x
+    }
+
+    #[test]
+    fn test_scan_block_works_correctly() {
+        let data = vec![
+            (1u32, 0),
+            (2u32, 1),
+            (2u32, 2),
+            (3u32, 3),
+            (4u32, 4),
+            (4u32, 5),
+            (4u32, 6),
+        ];
+
+        let res = scan_block(&data, &1, 0, |k1, k2| k1.abs_diff(*k2));
+        assert_eq!(res.len(), 1, "pos 0");
+        assert_eq!(res, vec![SearchResultItem::new(0, 0)], "pos 0 - data");
+        let res = scan_block(&data, &1, 1, |k1, k2| k1.abs_diff(*k2));
+        assert_eq!(res.len(), 3, "pos 0-2");
+        assert_eq!(
+            res,
+            vec![
+                SearchResultItem::new(0, 0),
+                SearchResultItem::new(1, 1),
+                SearchResultItem::new(2, 1),
+            ],
+            "pos 0-2 - data"
+        )
     }
 
     #[test]

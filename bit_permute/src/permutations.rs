@@ -39,7 +39,7 @@ impl Permutation {
             self.blocks
                 .iter()
                 .take(self.head)
-                .flat_map(|block| block.to_ops(word_size)),
+                .flat_map(|block| block.to_mask_ops(word_size)),
             word_size,
             optimize,
         )

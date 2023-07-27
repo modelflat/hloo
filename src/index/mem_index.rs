@@ -1,16 +1,22 @@
-use std::marker::PhantomData;
+use std::{fmt::Debug, marker::PhantomData};
 
-use crate::util::merge_sorted_alloc;
+use thiserror::Error;
 
 use super::{compute_index_stats, scan_block, select_block_at, BitPermuter, Index, SearchResultItem};
 
-pub struct MemoryIndex<K, V, M, P> {
+#[derive(Debug, Error)]
+pub enum MemoryIndexError {
+    #[error("distance ({distance}) exceeds maximum allowed distance for index ({max})")]
+    DistanceExceedsMax { distance: u32, max: u32 },
+}
+
+pub struct MemIndex<K, V, M, P> {
     permuter: P,
     data: Vec<(K, V)>,
     mask_type: PhantomData<M>,
 }
 
-impl<K, V, M, P> MemoryIndex<K, V, M, P>
+impl<K, V, M, P> MemIndex<K, V, M, P>
 where
     K: Copy,
     M: Copy + Ord,
@@ -23,16 +29,20 @@ where
             mask_type: Default::default(),
         }
     }
+
+    pub fn data(&self) -> &[(K, V)] {
+        &self.data
+    }
 }
 
-impl<K, V, M, P> Index<K, V, M, P> for MemoryIndex<K, V, M, P>
+impl<K, V, M, P> Index<K, V, M, P> for MemIndex<K, V, M, P>
 where
-    K: Copy + Ord + Default,
-    V: Copy + Default,
+    K: Copy + Ord,
+    V: Copy,
     M: Copy + Ord,
     P: BitPermuter<K, M>,
 {
-    type Error = ();
+    type Error = MemoryIndexError;
 
     fn load(&mut self) -> Result<(), Self::Error>
     where
@@ -49,15 +59,19 @@ where
     }
 
     fn insert(&mut self, items: &[(K, V)]) -> Result<(), Self::Error> {
-        // TODO this is inefficient
-        let mut permuted: Vec<_> = items.iter().map(|(k, v)| (self.permuter.apply(*k), *v)).collect();
-        permuted.sort_by_key(|(k, _)| *k);
-        let new = merge_sorted_alloc(&self.data, &permuted, |(k, _)| k);
-        self.data = new;
+        let items_permuted = items.iter().map(|(k, v)| (self.permuter.apply(*k), *v));
+        self.data.extend(items_permuted);
+        self.data.sort_unstable_by_key(|(k, _)| *k);
         Ok(())
     }
 
     fn search(&self, key: K, distance: u32) -> Result<Vec<SearchResultItem<V>>, Self::Error> {
+        if distance >= P::n_blocks() {
+            return Err(Self::Error::DistanceExceedsMax {
+                distance,
+                max: P::n_blocks(),
+            });
+        }
         let permuted_key = self.permuter.apply(key);
         let masked_key = self.permuter.mask(&permuted_key);
         let location = self
@@ -104,11 +118,15 @@ mod tests {
         fn dist(&self, key1: &Bits, key2: &Bits) -> u32 {
             key1.xor_count_ones(key2)
         }
+
+        fn n_blocks() -> u32 {
+            5
+        }
     }
 
     #[test]
-    fn test_memory_index_search_works() {
-        let mut index = MemoryIndex::new(MyPermuter(PermutationUtil::get_variant(0)));
+    fn test_mem_index_search_works() {
+        let mut index = MemIndex::new(MyPermuter(PermutationUtil::get_variant(0)));
         index
             .insert(&[
                 (Bits::new([0b11111000100010_001000100010001000u32]), 0),

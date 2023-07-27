@@ -37,6 +37,7 @@ pub fn make_permutations(item: TokenStream) -> TokenStream {
         "word size {} is not supported",
         word_bits
     );
+    let n_blocks = params.r;
     let n_words = params.f / word_bits;
     assert!(params.f % word_bits == 0 && n_words > 0);
 
@@ -91,6 +92,10 @@ pub fn make_permutations(item: TokenStream) -> TokenStream {
             pub struct #util_struct_name;
 
             impl #util_struct_name {
+                pub fn n_blocks() -> usize {
+                    #n_blocks
+                }
+
                 #[inline(always)]
                 pub fn get_variant(variant: usize) -> std::sync::Arc<dyn #struct_name> {
                     match variant {
