@@ -71,8 +71,6 @@ fn mem_lookup_works_correctly() {
         .into_iter()
         .collect::<HashSet<_>>();
     let result = lookup.search(&target, 3).unwrap().collect::<HashSet<_>>();
-    println!("{:?}", expected);
-    println!("{:?}", result);
     assert_eq!(
         result.len(),
         expected.len(),
@@ -92,14 +90,11 @@ fn memmap_lookup_works_correctly() {
     let mut lookup = LookupUtil::create_memmap_lookup::<i64>(0, tmp_path.path()).unwrap();
     let data = generate_data(10);
     let target = flip_bits(data[0].0, 3);
-    println!("init_data = {:?}", data);
     lookup.insert(&data).unwrap();
     let expected = hloo::index::scan_block(&data, &target, 5)
         .into_iter()
         .collect::<HashSet<_>>();
     let result = lookup.search(&target, 3).unwrap().collect::<HashSet<_>>();
-    println!("{:?}", expected);
-    println!("{:?}", result);
     assert_eq!(
         result.len(),
         expected.len(),
@@ -171,6 +166,49 @@ fn naive_results_correspond_to_hloo() {
         );
         for el in result_map {
             assert!(expected.contains(&el), "expected item is missing: {:?}", el);
+        }
+    }
+}
+
+#[cfg(feature = "memmap_index")]
+#[test]
+fn memmap_lookup_can_be_saved_and_loaded() {
+    let tmp_path = tempfile::tempdir().unwrap();
+    let data = generate_data(10);
+    let target = flip_bits(data[0].0, 3);
+    let expected = hloo::index::scan_block(&data, &target, 5)
+        .into_iter()
+        .collect::<HashSet<_>>();
+
+    {
+        let mut lookup = LookupUtil::create_memmap_lookup::<i64>(0, tmp_path.path()).unwrap();
+        lookup.insert(&data).unwrap();
+        let result = lookup.search(&target, 3).unwrap().collect::<HashSet<_>>();
+        assert_eq!(
+            result.len(),
+            expected.len(),
+            "incorrect number of search results after load! expected {}, got {}",
+            expected.len(),
+            result.len()
+        );
+        for el in result {
+            assert!(expected.contains(&el), "expected item is missing after load: {:?}", el);
+        }
+        lookup.persist().unwrap();
+    }
+
+    {
+        let lookup = LookupUtil::load_memmap_lookup::<i64>(0, tmp_path.path()).unwrap();
+        let result = lookup.search(&target, 3).unwrap().collect::<HashSet<_>>();
+        assert_eq!(
+            result.len(),
+            expected.len(),
+            "incorrect number of search results after load! expected {}, got {}",
+            expected.len(),
+            result.len()
+        );
+        for el in result {
+            assert!(expected.contains(&el), "expected item is missing after load: {:?}", el);
         }
     }
 }

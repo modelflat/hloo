@@ -2,11 +2,7 @@ use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 
-use hloo::index::{Index, MemIndex};
-use hloo::init_lookup;
-
-#[cfg(feature = "memmap_index")]
-use hloo::index::MemMapIndex;
+use hloo::{index::Index, init_lookup};
 
 init_lookup!(LookupUtil, 256, 5, 2, 64);
 

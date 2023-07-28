@@ -1,11 +1,18 @@
-use std::{collections::BTreeSet, marker::PhantomData, path::PathBuf};
+use std::{
+    collections::BTreeSet,
+    marker::PhantomData,
+    path::{Path, PathBuf},
+};
 
 use bit_permute::Distance;
 use thiserror::Error;
 
 use crate::mmvec::{MmVec, MmVecError};
 
-use super::{compute_index_stats, extract_key, scan_block, select_block_at, BitPermuter, Index, SearchResultItem};
+use super::{
+    compute_index_stats, extract_key, scan_block, select_block_at, BitPermuter, Index, PersistentIndex,
+    SearchResultItem,
+};
 
 #[derive(Debug, Error)]
 pub enum MemMapIndexError {
@@ -17,26 +24,19 @@ pub enum MemMapIndexError {
 
 pub struct MemMapIndex<K, V, M, P> {
     permuter: P,
-    path: PathBuf,
-    data_signature: u64,
     data: MmVec<(K, V)>,
-    mask_type: PhantomData<M>,
+    _dummy: PhantomData<M>,
 }
 
 impl<K, V, M, P> MemMapIndex<K, V, M, P>
 where
-    K: Copy,
-    V: Copy,
-    M: Copy + Ord,
-    P: BitPermuter<K, M>,
+    (K, V): Copy,
 {
     pub fn new(permuter: P, sig: u64, path: PathBuf) -> Result<Self, MemMapIndexError> {
         Ok(Self {
             permuter,
-            path: path.clone(),
-            data_signature: sig,
             data: MmVec::new_empty(sig, path)?,
-            mask_type: Default::default(),
+            _dummy: PhantomData,
         })
     }
 
@@ -58,22 +58,6 @@ where
     P: BitPermuter<K, M>,
 {
     type Error = MemMapIndexError;
-
-    fn load(&mut self) -> Result<(), Self::Error>
-    where
-        Self: Sized,
-    {
-        self.data = MmVec::from_path(self.data_signature, self.path.clone())?;
-        Ok(())
-    }
-
-    fn save(&self) -> Result<(), Self::Error>
-    where
-        Self: Sized,
-    {
-        self.data.flush()?;
-        Ok(())
-    }
 
     fn insert(&mut self, items: &[(K, V)]) -> Result<(), Self::Error> {
         let permuted: Vec<_> = items.iter().map(|(k, v)| (self.permuter.apply(k), *v)).collect();
@@ -111,6 +95,36 @@ where
 
     fn stats(&self) -> super::IndexStats {
         compute_index_stats(self.data(), |key| self.permuter.mask(key))
+    }
+}
+
+impl<K, V, M, P> PersistentIndex<P> for MemMapIndex<K, V, M, P>
+where
+    (K, V): Copy,
+{
+    type Error = MemMapIndexError;
+
+    fn create(permuter: P, sig: u64, path: &Path) -> Result<Self, Self::Error> {
+        let data = MmVec::new_empty(sig, path.to_path_buf())?;
+        Ok(Self {
+            permuter,
+            data,
+            _dummy: PhantomData,
+        })
+    }
+
+    fn load(permuter: P, sig: u64, path: &Path) -> Result<Self, Self::Error> {
+        let data = MmVec::from_path(sig, path.to_path_buf())?;
+        Ok(Self {
+            permuter,
+            data,
+            _dummy: PhantomData,
+        })
+    }
+
+    fn persist(&self) -> Result<(), Self::Error> {
+        self.data.flush()?;
+        Ok(())
     }
 }
 

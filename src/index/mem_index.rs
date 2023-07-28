@@ -14,7 +14,7 @@ pub enum MemIndexError {
 pub struct MemIndex<K, V, M, P> {
     permuter: P,
     data: Vec<(K, V)>,
-    mask_type: PhantomData<M>,
+    _dummy: PhantomData<M>,
 }
 
 impl<K, V, M, P> MemIndex<K, V, M, P>
@@ -26,8 +26,8 @@ where
     pub fn new(permuter: P) -> Self {
         Self {
             permuter,
-            data: Default::default(),
-            mask_type: Default::default(),
+            data: Vec::new(),
+            _dummy: PhantomData,
         }
     }
 
@@ -44,20 +44,6 @@ where
     P: BitPermuter<K, M>,
 {
     type Error = MemIndexError;
-
-    fn load(&mut self) -> Result<(), Self::Error>
-    where
-        Self: Sized,
-    {
-        unimplemented!("Memory index cannot be loaded from a file!");
-    }
-
-    fn save(&self) -> Result<(), Self::Error>
-    where
-        Self: Sized,
-    {
-        unimplemented!("Memory index cannot be saved to a file!");
-    }
 
     fn insert(&mut self, items: &[(K, V)]) -> Result<(), Self::Error> {
         let items_permuted = items.iter().map(|(k, v)| (self.permuter.apply(k), *v));

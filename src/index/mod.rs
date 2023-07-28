@@ -6,7 +6,7 @@ mod memmap_index;
 #[cfg(feature = "memmap_index")]
 pub use memmap_index::{MemMapIndex, MemMapIndexError};
 
-use std::hash::Hash;
+use std::{hash::Hash, path::Path};
 
 use bit_permute::{BitPermuter, Distance};
 
@@ -55,16 +55,6 @@ where
 {
     type Error;
 
-    /// Load this index's data from a file.
-    fn load(&mut self) -> Result<(), Self::Error>
-    where
-        Self: Sized;
-
-    /// Persist index to a file
-    fn save(&self) -> Result<(), Self::Error>
-    where
-        Self: Sized;
-
     /// Insert items into this index.
     fn insert(&mut self, items: &[(K, V)]) -> Result<(), Self::Error>;
 
@@ -76,6 +66,19 @@ where
 
     /// Compute stats for this index.
     fn stats(&self) -> IndexStats;
+}
+
+pub trait PersistentIndex<P>
+where
+    Self: Sized,
+{
+    type Error;
+
+    fn create(permuter: P, sig: u64, path: &Path) -> Result<Self, Self::Error>;
+
+    fn load(permuter: P, sig: u64, path: &Path) -> Result<Self, Self::Error>;
+
+    fn persist(&self) -> Result<(), Self::Error>;
 }
 
 /// Extract first element from a tuple.

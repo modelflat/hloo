@@ -20,6 +20,7 @@ pub mod mmvec;
 pub use bit_permute;
 pub use bit_permute_macro::make_permutations;
 
+pub use index::Index;
 pub use lookup::Lookup;
 
 /// This macro serves as an initialization step to create lookups with specified configuration.
@@ -30,6 +31,16 @@ macro_rules! init_lookup {
         hloo::make_permutations!(struct_name = "Permutations", f = $f, r = $r, k = $k, w = $w);
 
         pub struct $name;
+
+        pub type Permuter = DynBitPermuter<Bits, Mask>;
+
+        pub type MemIndex<T> = hloo::index::MemIndex<Bits, T, Mask, Permuter>;
+        pub type MemLookup<T> = hloo::Lookup<Bits, T, Mask, Permuter, MemIndex<T>>;
+
+        #[cfg(feature = "memmap_index")]
+        pub type MemMapIndex<T> = hloo::index::MemMapIndex<Bits, T, Mask, Permuter>;
+        #[cfg(feature = "memmap_index")]
+        pub type MemMapLookup<T> = hloo::Lookup<Bits, T, Mask, Permuter, MemMapIndex<T>>;
 
         impl $name {
             pub fn signature(type_sig: u64) -> u64 {
@@ -47,40 +58,28 @@ macro_rules! init_lookup {
                 Permutations::get_variant(i)
             }
 
-            pub fn create_mem_lookup<T: Copy + std::fmt::Debug>() -> hloo::Lookup<
-                Bits,
-                T,
-                Mask,
-                hloo::bit_permute::DynBitPermuter<Bits, Mask>,
-                hloo::index::MemIndex<Bits, T, Mask, hloo::bit_permute::DynBitPermuter<Bits, Mask>>,
-            > {
+            pub fn create_mem_lookup<T>() -> MemLookup<T> {
                 let permutations = Permutations::get_all_variants();
-                let indexes = permutations.into_iter().map(hloo::index::MemIndex::new).collect();
-                hloo::Lookup::new(indexes)
+                let indexes = permutations.into_iter().map(MemIndex::new).collect();
+                MemLookup::new(indexes)
             }
 
             #[cfg(feature = "memmap_index")]
-            pub fn create_memmap_lookup<T: Copy + std::fmt::Debug>(
+            pub fn create_memmap_lookup<T: Copy>(
                 sig: u64,
                 path: &std::path::Path,
-            ) -> Result<
-                hloo::Lookup<
-                    Bits,
-                    T,
-                    Mask,
-                    hloo::bit_permute::DynBitPermuter<Bits, Mask>,
-                    hloo::index::MemMapIndex<Bits, T, Mask, hloo::bit_permute::DynBitPermuter<Bits, Mask>>,
-                >,
-                hloo::index::MemMapIndexError,
-            > {
+            ) -> Result<MemMapLookup<T>, hloo::index::MemMapIndexError> {
                 let sig = Self::signature(sig);
-                let mut indexes = Vec::new();
-                assert!(path.is_dir(), "path should be a directory!");
-                for (i, p) in Permutations::get_all_variants().into_iter().enumerate() {
-                    let index_path = path.join(format!("index_{:04}.dat", i));
-                    indexes.push(hloo::index::MemMapIndex::new(p, sig, index_path)?)
-                }
-                Ok(hloo::Lookup::new(indexes))
+                Ok(MemMapLookup::create(Permutations::get_all_variants(), sig, path)?)
+            }
+
+            #[cfg(feature = "memmap_index")]
+            pub fn load_memmap_lookup<T: Copy>(
+                sig: u64,
+                path: &std::path::Path,
+            ) -> Result<MemMapLookup<T>, hloo::index::MemMapIndexError> {
+                let sig = Self::signature(sig);
+                Ok(MemMapLookup::load(Permutations::get_all_variants(), sig, path)?)
             }
         }
     };
