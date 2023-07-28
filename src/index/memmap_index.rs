@@ -1,11 +1,11 @@
-use std::{marker::PhantomData, path::PathBuf};
+use std::{collections::BTreeSet, marker::PhantomData, path::PathBuf};
 
 use bit_permute::Distance;
 use thiserror::Error;
 
 use crate::mmvec::{MmVec, MmVecError};
 
-use super::{compute_index_stats, scan_block, select_block_at, BitPermuter, Index, SearchResultItem};
+use super::{compute_index_stats, extract_key, scan_block, select_block_at, BitPermuter, Index, SearchResultItem};
 
 #[derive(Debug, Error)]
 pub enum MemMapIndexError {
@@ -43,6 +43,11 @@ where
     pub fn data(&self) -> &[(K, V)] {
         unsafe { self.data.as_slice() }
     }
+
+    pub fn destroy(self) -> Result<(), MemMapIndexError> {
+        self.data.destroy()?;
+        Ok(())
+    }
 }
 
 impl<K, V, M, P> Index<K, V, M, P> for MemMapIndex<K, V, M, P>
@@ -71,13 +76,18 @@ where
     }
 
     fn insert(&mut self, items: &[(K, V)]) -> Result<(), Self::Error> {
-        let mut permuted: Vec<_> = items.iter().map(|(k, v)| (self.permuter.apply(*k), *v)).collect();
-        permuted.sort_by_key(|(k, _)| *k);
-        self.data.merge_sorted(&permuted, |(k, _)| k)?;
+        let permuted: Vec<_> = items.iter().map(|(k, v)| (self.permuter.apply(k), *v)).collect();
+        self.data.insert_sorted(&permuted, extract_key)?;
         Ok(())
     }
 
-    fn search(&self, key: K, distance: u32) -> Result<Vec<SearchResultItem<V>>, Self::Error> {
+    fn remove(&mut self, keys: &[K]) -> Result<(), Self::Error> {
+        let set: BTreeSet<_> = keys.iter().map(|k| self.permuter.apply(k)).collect();
+        self.data.remove_matching(|(k, _)| set.contains(k), extract_key)?;
+        Ok(())
+    }
+
+    fn search(&self, key: &K, distance: u32) -> Result<Vec<SearchResultItem<V>>, Self::Error> {
         if distance >= self.permuter.n_blocks() {
             return Err(Self::Error::DistanceExceedsMax {
                 distance,
@@ -111,27 +121,125 @@ mod tests {
 
     use super::*;
 
-    make_permutations!(struct_name = "Permutations", f = 32, r = 5, k = 2, w = 32);
+    make_permutations!(struct_name = "Permutations", f = 32, r = 5, k = 1, w = 32);
     // blocks: 7 7 6 6 6
     // mask width: 32 / 5 ; 2 -> 14
 
     #[test]
-    fn test_memvec_index_search_works() {
+    fn memmap_index_search_works_correctly() {
         let tempdir = tempfile::tempdir().expect("failed to create temp dir");
-        let mut index = MemMapIndex::new(Permutations::get_variant(0), 0, tempdir.path().join("storage.bin"))
-            .expect("failed to create memory-mapped vector");
-        index
-            .insert(&[
+        for (i, perm) in Permutations::get_all_variants().into_iter().enumerate() {
+            let index_path = tempdir.path().join("storage.bin");
+            let mut index =
+                MemMapIndex::new(perm, 0, index_path.clone()).expect("failed to create memory-mapped vector");
+            index
+                .insert(&[
+                    (Bits::new([0b11111000100010_001000100010001000u32]), 0),
+                    (Bits::new([0b11111000100010_001000100011111000u32]), 2),
+                    (Bits::new([0b11001000111110_001000100010000000u32]), 3),
+                    (Bits::new([0b10011110100010_001000100010001100u32]), 4),
+                ])
+                .unwrap();
+            // NOTE: only distance 0 search can be tested here
+            let result = index
+                .search(&Bits::new([0b11001000111110_001000100010000000u32]), 0)
+                .unwrap();
+            assert_eq!(result.len(), 1, "[{}] number of search results is wrong", i);
+            assert_eq!(result[0], SearchResultItem::new(3, 2), "[{}] search result is wrong", i);
+        }
+    }
+
+    #[test]
+    fn memmap_index_insert_works_correctly() {
+        let tempdir = tempfile::tempdir().expect("failed to create temp dir");
+        for (i, perm) in Permutations::get_all_variants().into_iter().enumerate() {
+            let index_path = tempdir.path().join("storage.bin");
+            let mut index = MemMapIndex::new(perm.clone(), 0, index_path.clone()).unwrap();
+            let data_part_1 = vec![
                 (Bits::new([0b11111000100010_001000100010001000u32]), 0),
-                (Bits::new([0b11111000100010_001000100011111000u32]), 2),
                 (Bits::new([0b11001000111110_001000100010001010u32]), 3),
+                (Bits::new([0b11111000100010_001000100011111000u32]), 2),
                 (Bits::new([0b10011110100010_001000100010001100u32]), 4),
-            ])
-            .unwrap();
-        let result = index
-            .search(Bits::new([0b11001000111110_001011100010001010u32]), 2)
-            .unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], SearchResultItem::new(3, 2))
+            ];
+            index.insert(&data_part_1).unwrap();
+            assert_eq!(
+                index.data().len(),
+                data_part_1.len(),
+                "[{}] index length is wrong after first insert",
+                i
+            );
+            let mut expected: Vec<_> = data_part_1.iter().map(|(k, v)| (perm.apply(k), *v)).collect();
+            expected.sort_unstable_by_key(|(k, _)| *k);
+            assert_eq!(
+                index.data(),
+                expected,
+                "[{}] index contents is wrong after first insert",
+                i
+            );
+
+            let data_part_2 = vec![
+                (Bits::new([0b10001000101110_001000100010001000u32]), 1),
+                (Bits::new([0b11111000101110_101000100010001010u32]), 6),
+                (Bits::new([0b11111010100010_001000100011111000u32]), 2),
+                (Bits::new([0b10010110101110_001000100010001100u32]), 9),
+            ];
+            index.insert(&data_part_2).unwrap();
+            assert_eq!(
+                index.data().len(),
+                data_part_1.len() + data_part_2.len(),
+                "[{}] index length is wrong after second insert",
+                i
+            );
+            expected.extend(data_part_2.iter().map(|(k, v)| (perm.apply(k), *v)));
+            expected.sort_unstable_by_key(|(k, _)| *k);
+            assert_eq!(
+                index.data(),
+                expected,
+                "[{}] index contents is wrong after second insert",
+                i
+            );
+        }
+    }
+
+    #[test]
+    fn memmap_index_removal_works_correctly() {
+        let tempdir = tempfile::tempdir().expect("failed to create temp dir");
+        for (i, perm) in Permutations::get_all_variants().into_iter().enumerate() {
+            let index_path = tempdir.path().join("storage.bin");
+            let mut index = MemMapIndex::new(perm.clone(), 0, index_path.clone()).unwrap();
+            let data = vec![
+                (Bits::new([0b11111000100010_001000100010001000u32]), 0),
+                (Bits::new([0b11001000111110_001000100010001010u32]), 3),
+                (Bits::new([0b11111000100010_001000100011111000u32]), 2),
+                (Bits::new([0b10011110100010_001000100010001100u32]), 4),
+            ];
+            index.insert(&data).unwrap();
+
+            let to_remove = vec![
+                Bits::new([0b11111000100010_001000100010001000u32]),
+                Bits::new([0b11001000111110_001000100010001010u32]),
+            ];
+            index.remove(&to_remove).unwrap();
+            assert_eq!(
+                index.data().len(),
+                data.len() - to_remove.len(),
+                "[{}] index length is wrong after removal",
+                i
+            );
+            let mut expected: Vec<_> = vec![
+                (Bits::new([0b11111000100010_001000100011111000u32]), 2),
+                (Bits::new([0b10011110100010_001000100010001100u32]), 4),
+            ]
+            .iter()
+            .map(|(k, v)| (perm.apply(k), *v))
+            .collect();
+            expected.sort_unstable_by_key(|(k, _)| *k);
+            assert_eq!(
+                index.data(),
+                expected,
+                "[{}] index contents is wrong after second insert",
+                i
+            );
+        }
     }
 }

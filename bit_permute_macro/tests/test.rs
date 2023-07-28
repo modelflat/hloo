@@ -30,7 +30,7 @@ fn apply_works_correctly() {
     ];
     assert_eq!(Permutations::get_all_variants().len(), 10);
     for (pi, perm) in Permutations::get_all_variants().iter().enumerate() {
-        let res = perm.apply(bits);
+        let res = perm.apply(&bits);
         let found = expected
             .iter()
             .enumerate()
@@ -111,7 +111,7 @@ fn apply_works_correctly_with_rest_ordering_preserved() {
     ];
     assert_eq!(Permutations::get_all_variants().len(), 10);
     for (pi, perm) in Permutations::get_all_variants().iter().enumerate() {
-        let res = perm.apply(bits);
+        let res = perm.apply(&bits);
         let found = expected.iter().enumerate().find(|(_, val)| res.data == **val);
         if let Some((i, _)) = found {
             expected.remove(i);
@@ -128,8 +128,8 @@ fn apply_then_revert_is_identity() {
 
     let bits = Bits::new(random());
     for (i, perm) in Permutations::get_all_variants().iter().enumerate() {
-        let permuted = perm.apply(bits);
-        let reverted = perm.revert(permuted);
+        let permuted = perm.apply(&bits);
+        let reverted = perm.revert(&permuted);
         assert_eq!(bits, reverted, "permutation {}: failed apply-revert test!", i);
     }
 }

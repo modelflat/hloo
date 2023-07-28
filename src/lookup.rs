@@ -34,7 +34,7 @@ where
         Ok(())
     }
 
-    pub fn search(&self, key: K, distance: u32) -> Result<impl Iterator<Item = SearchResultItem<V>>, I::Error> {
+    pub fn search(&self, key: &K, distance: u32) -> Result<impl Iterator<Item = SearchResultItem<V>>, I::Error> {
         let mut result = Vec::with_capacity(self.indexes.len());
         for index in &self.indexes {
             let index_result = index.search(key, distance)?;

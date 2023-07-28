@@ -32,7 +32,7 @@ fn mem_lookup_compiles_and_runs_without_errors() {
     let data = generate_data(1);
     let target = data[0].0;
     lookup.insert(&data).unwrap();
-    let result = lookup.search(target, 3).unwrap().collect::<HashSet<_>>();
+    let result = lookup.search(&target, 3).unwrap().collect::<HashSet<_>>();
     assert_eq!(result.len(), 1, "incorrect number of search results!");
     assert_eq!(
         result.into_iter().next().map(|it| *it.data()),
@@ -49,7 +49,7 @@ fn memmap_lookup_compiles_and_runs_without_errors() {
     let target = data[0].0;
     lookup.insert(&data).expect("failed to insert into memmap index");
     let result = lookup
-        .search(target, 3)
+        .search(&target, 3)
         .expect("failed to search memmap index")
         .collect::<HashSet<_>>();
     assert_eq!(result.len(), 1, "incorrect number of search results!");
@@ -69,7 +69,7 @@ fn mem_lookup_works_correctly() {
     let expected = hloo::index::scan_block(&data, &target, 5)
         .into_iter()
         .collect::<HashSet<_>>();
-    let result = lookup.search(target, 3).unwrap().collect::<HashSet<_>>();
+    let result = lookup.search(&target, 3).unwrap().collect::<HashSet<_>>();
     println!("{:?}", expected);
     println!("{:?}", result);
     assert_eq!(
@@ -95,7 +95,7 @@ fn memmap_lookup_works_correctly() {
     let expected = hloo::index::scan_block(&data, &target, 5)
         .into_iter()
         .collect::<HashSet<_>>();
-    let result = lookup.search(target, 3).unwrap().collect::<HashSet<_>>();
+    let result = lookup.search(&target, 3).unwrap().collect::<HashSet<_>>();
     println!("{:?}", expected);
     println!("{:?}", result);
     assert_eq!(
@@ -116,7 +116,7 @@ fn mem_lookup_single_entry() {
     let target = init_data[0].0;
     let mut lookup = LookupUtil::create_mem_lookup::<i64>();
     lookup.insert(&init_data).unwrap();
-    let result = lookup.search(target, 0).unwrap().collect::<HashSet<_>>();
+    let result = lookup.search(&target, 0).unwrap().collect::<HashSet<_>>();
     assert_eq!(result.len(), 1, "incorrect number of search results!");
     assert_eq!(
         result.into_iter().next().map(|it| *it.data()),
@@ -140,7 +140,7 @@ fn naive_results_correspond_to_hloo() {
         .into_iter()
         .collect::<HashSet<_>>();
 
-    let result_mem = lookup_mem.search(target, 3).unwrap().collect::<HashSet<_>>();
+    let result_mem = lookup_mem.search(&target, 3).unwrap().collect::<HashSet<_>>();
     assert_eq!(
         result_mem.len(),
         expected.len(),
@@ -152,7 +152,7 @@ fn naive_results_correspond_to_hloo() {
         assert!(expected.contains(&el), "expected item is missing: {:?}", el);
     }
 
-    let result_map = lookup_map.search(target, 3).unwrap().collect::<HashSet<_>>();
+    let result_map = lookup_map.search(&target, 3).unwrap().collect::<HashSet<_>>();
     assert_eq!(
         result_map.len(),
         expected.len(),

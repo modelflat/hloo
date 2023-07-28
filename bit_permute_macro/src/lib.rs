@@ -34,7 +34,7 @@ pub fn make_permutations(item: TokenStream) -> TokenStream {
     let params = match PermutationParams::from_list(&attr_args) {
         Ok(v) => v,
         Err(e) => {
-            return TokenStream::from(Error::from(e).write_errors());
+            return TokenStream::from(e.write_errors());
         }
     };
 

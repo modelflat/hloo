@@ -1,9 +1,9 @@
-use std::{fmt::Debug, marker::PhantomData};
+use std::{collections::BTreeSet, fmt::Debug, marker::PhantomData};
 
 use bit_permute::Distance;
 use thiserror::Error;
 
-use super::{compute_index_stats, scan_block, select_block_at, BitPermuter, Index, SearchResultItem};
+use super::{compute_index_stats, extract_key, scan_block, select_block_at, BitPermuter, Index, SearchResultItem};
 
 #[derive(Debug, Error)]
 pub enum MemIndexError {
@@ -60,13 +60,19 @@ where
     }
 
     fn insert(&mut self, items: &[(K, V)]) -> Result<(), Self::Error> {
-        let items_permuted = items.iter().map(|(k, v)| (self.permuter.apply(*k), *v));
+        let items_permuted = items.iter().map(|(k, v)| (self.permuter.apply(k), *v));
         self.data.extend(items_permuted);
-        self.data.sort_unstable_by_key(|(k, _)| *k);
+        self.data.sort_unstable_by_key(extract_key);
         Ok(())
     }
 
-    fn search(&self, key: K, distance: u32) -> Result<Vec<SearchResultItem<V>>, Self::Error> {
+    fn remove(&mut self, keys: &[K]) -> Result<(), Self::Error> {
+        let set: BTreeSet<_> = keys.iter().map(|k| self.permuter.apply(k)).collect();
+        self.data.retain(|(k, _)| !set.contains(k));
+        Ok(())
+    }
+
+    fn search(&self, key: &K, distance: u32) -> Result<Vec<SearchResultItem<V>>, Self::Error> {
         if distance >= self.permuter.n_blocks() {
             return Err(Self::Error::DistanceExceedsMax {
                 distance,
@@ -116,7 +122,7 @@ mod tests {
             ])
             .unwrap();
         let result = index
-            .search(Bits::new([0b11001000111110_001011100010001010u32]), 2)
+            .search(&Bits::new([0b11001000111110_001011100010001010u32]), 2)
             .unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], SearchResultItem::new(3, 2))

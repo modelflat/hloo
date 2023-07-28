@@ -7,7 +7,7 @@
 //! let mut lookup = LookupUtil::create_mem_lookup::<i64>();
 //! // 3) Use your lookup
 //! lookup.insert(&[(Bits::new(rand::random()), 123456)]);
-//! lookup.search(Bits::new(rand::random()), 4);
+//! lookup.search(&Bits::new(rand::random()), 4);
 //! ```
 
 pub mod index;

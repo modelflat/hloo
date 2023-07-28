@@ -1,3 +1,13 @@
+/// partition a slice according to predicate
+/// Elements for which predicate returns true go to the start.
+pub fn partition<T, F>(data: &mut [T], predicate: F) -> usize
+where
+    F: Fn(&T) -> bool,
+{
+    data.sort_by_key(|el| !predicate(el));
+    data.partition_point(predicate)
+}
+
 /// Merge two sorted vectors into one.
 pub fn merge_sorted<T, K>(src1: &[T], src2: &[T], dst: &mut [T], sort_key: impl Fn(T) -> K)
 where
@@ -30,7 +40,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::merge_sorted;
+    use super::{merge_sorted, partition};
 
     #[test]
     fn merge_sorted_one_vector() {
@@ -57,5 +67,13 @@ mod tests {
         expected.sort();
 
         assert_eq!(expected, dst)
+    }
+
+    #[test]
+    fn partition_vector() {
+        let mut data = vec![0, 3, 4, 6, 3];
+        let split = partition(&mut data, |el| *el != 3);
+        assert_eq!(split, 3, "wrong split value");
+        assert_eq!(data, vec![0, 4, 6, 3, 3], "wrong partitioned data: {:?}", data);
     }
 }

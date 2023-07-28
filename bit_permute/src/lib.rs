@@ -6,10 +6,10 @@ pub use permutations::{create_permutations, Permutation};
 
 pub trait BitPermuter<K, M> {
     /// Apply permutation to bit sequence `key`.
-    fn apply(&self, key: K) -> K;
+    fn apply(&self, key: &K) -> K;
 
     /// Revert permutation of bit sequence `key`.
-    fn revert(&self, key: K) -> K;
+    fn revert(&self, key: &K) -> K;
 
     /// Apply mask to bit sequence `key`.
     fn mask(&self, key: &K) -> M;
@@ -18,14 +18,15 @@ pub trait BitPermuter<K, M> {
     fn n_blocks(&self) -> u32;
 }
 
+#[derive(Clone)]
 pub struct DynBitPermuter<K, M>(pub std::sync::Arc<dyn BitPermuter<K, M>>);
 
 impl<K, M> BitPermuter<K, M> for DynBitPermuter<K, M> {
-    fn apply(&self, key: K) -> K {
+    fn apply(&self, key: &K) -> K {
         self.0.apply(key)
     }
 
-    fn revert(&self, key: K) -> K {
+    fn revert(&self, key: &K) -> K {
         self.0.revert(key)
     }
 

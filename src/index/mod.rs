@@ -45,20 +45,6 @@ where
     }
 }
 
-// pub trait BitPermuter<K, M> {
-//     /// Apply permutation to bit sequence `key`.
-//     fn apply(&self, key: K) -> K;
-
-//     /// Apply mask to bit sequence `key`.
-//     fn mask(&self, key: &K) -> M;
-
-//     /// Compute distance between `key1` and `key2`.
-//     fn dist(&self, key1: &K, key2: &K) -> u32;
-
-//     /// Get number of blocks this permuter operates on
-//     fn n_blocks() -> u32;
-// }
-
 pub trait Index<K, V, M, P>
 where
     K: Ord,
@@ -76,14 +62,23 @@ where
     where
         Self: Sized;
 
-    /// Insert an item into this index.
+    /// Insert items into this index.
     fn insert(&mut self, items: &[(K, V)]) -> Result<(), Self::Error>;
 
+    /// Remove items from this index.
+    fn remove(&mut self, keys: &[K]) -> Result<(), Self::Error>;
+
     /// Search for an item in this index.
-    fn search(&self, key: K, distance: u32) -> Result<Vec<SearchResultItem<V>>, Self::Error>;
+    fn search(&self, key: &K, distance: u32) -> Result<Vec<SearchResultItem<V>>, Self::Error>;
 
     /// Compute stats for this index.
     fn stats(&self) -> IndexStats;
+}
+
+/// Extract first element from a tuple.
+#[inline(always)]
+pub fn extract_key<K: Copy, V>(item: &(K, V)) -> K {
+    item.0
 }
 
 #[derive(Default)]

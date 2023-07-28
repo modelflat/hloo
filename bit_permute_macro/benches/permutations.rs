@@ -11,7 +11,7 @@ fn apply_bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("apply");
     for i in 0..10 {
         let permutation = Permutations::get_variant(i);
-        group.bench_function(&format!("{}", i), |b| b.iter(|| permutation.apply(data)));
+        group.bench_function(&format!("{}", i), |b| b.iter(|| permutation.apply(&data)));
     }
     group.finish();
 }

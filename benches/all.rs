@@ -46,8 +46,8 @@ fn index_search_comparison(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("single index - search 1M");
 
-    group.bench_function("in-memory", |b| b.iter(|| index1.search(target, 3)));
-    group.bench_function("mem-mapped", |b| b.iter(|| index2.search(target, 3)));
+    group.bench_function("in-memory", |b| b.iter(|| index1.search(&target, 3)));
+    group.bench_function("mem-mapped", |b| b.iter(|| index2.search(&target, 3)));
 
     group.finish();
 }
@@ -67,8 +67,8 @@ fn search_comparison(c: &mut Criterion) {
     let mut group = c.benchmark_group("search 1M");
 
     group.bench_function("naive", |b| b.iter(|| hloo::index::scan_block(&data, &target, 3)));
-    group.bench_function("hloo in-memory", |b| b.iter(|| lookup1.search(target, 3)));
-    group.bench_function("hloo mem-mapped", |b| b.iter(|| lookup2.search(target, 3)));
+    group.bench_function("hloo in-memory", |b| b.iter(|| lookup1.search(&target, 3)));
+    group.bench_function("hloo mem-mapped", |b| b.iter(|| lookup2.search(&target, 3)));
 
     group.finish();
 }

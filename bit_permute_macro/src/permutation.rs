@@ -68,13 +68,13 @@ impl ToTokens for Permutation<'_> {
             pub struct #struct_name;
 
             impl BitPermuter<#data_type_name, #mask_type_name> for #struct_name {
-                fn apply(&self, w: #data_type_name) -> #data_type_name {
+                fn apply(&self, w: &#data_type_name) -> #data_type_name {
                     let mut nw: #data_type_name = Default::default();
                     #(#apply_ops);*;
                     nw
                 }
 
-                fn revert(&self, w: #data_type_name) -> #data_type_name {
+                fn revert(&self, w: &#data_type_name) -> #data_type_name {
                     let mut nw: #data_type_name = Default::default();
                     #(#revert_ops);*;
                     nw

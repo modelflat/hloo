@@ -9,7 +9,7 @@ use std::{
 use memmap2::{MmapMut, MmapOptions};
 use thiserror::Error;
 
-use crate::util::merge_sorted;
+use crate::util::partition;
 
 #[derive(Debug, Error)]
 pub enum MmVecError {
@@ -119,6 +119,14 @@ where
         Ok(())
     }
 
+    /// Destroys self, removing the underlying file
+    pub fn destroy(self) -> Result<(), MmVecError> {
+        let path = self.path.clone();
+        drop(self);
+        fs::remove_file(path)?;
+        Ok(())
+    }
+
     /// Copies self into path, and returns a new vector at this path.
     pub fn copy_to(&self, path: PathBuf) -> Result<Self, MmVecError> {
         self.flush()?;
@@ -142,84 +150,38 @@ where
         Ok(Self::new(moved_data, path))
     }
 
-    /// Map the existing vector into a new one at `Path`, with indexes.
-    pub fn map_with_index<F>(&self, f: F, path: PathBuf) -> Result<Self, MmVecError>
+    pub fn insert_sorted<O, F>(&mut self, items: &[T], sort_key: F) -> Result<(), MmVecError>
     where
-        F: Fn(usize, T) -> T,
-    {
-        // SAFETY: this is safe because both vectors are valid
-        let mapped = unsafe {
-            let mut dst = Self::with_length_uninit(self.sig(), self.len(), path)?;
-            let src_slice = self.as_slice();
-            let dst_slice = dst.as_slice_mut();
-            for (idx, el) in src_slice.iter().enumerate() {
-                dst_slice[idx] = f(idx, *el);
-            }
-            dst
-        };
-        Ok(mapped)
-    }
-
-    /// Map the existing vector into a new one at `Path`.
-    #[inline]
-    pub fn map<F>(&self, f: F, path: PathBuf) -> Result<Self, MmVecError>
-    where
-        F: Fn(T) -> T,
-    {
-        self.map_with_index(|_, el| f(el), path)
-    }
-
-    ///  Merge self and other into a single vector, in-place. Both vectors should be sorted!
-    pub fn merge_sorted<O, F>(&mut self, other: &[T], sort_key: F) -> Result<(), MmVecError>
-    where
-        F: Fn(T) -> O,
+        F: Fn(&T) -> O,
         O: Ord,
     {
-        let path = self.path.clone();
-        let mut temp_path = path.clone();
-        temp_path.set_extension(".merging");
-        let merged = self.merge_sorted_into_path(other, sort_key, temp_path)?;
-        *self = merged.move_to(path)?;
+        let current_len = self.len();
+        unsafe {
+            self.data.resize(current_len + items.len())?;
+            self.data.as_slice_mut()[current_len..].copy_from_slice(items);
+            self.data.as_slice_mut().sort_unstable_by_key(sort_key);
+        }
         Ok(())
     }
 
-    /// Merge self and other into a single vector. Both vectors should be sorted!
-    pub fn merge_sorted_into_path<O, F>(&self, other: &[T], sort_key: F, path: PathBuf) -> Result<Self, MmVecError>
+    pub fn remove_matching<O, F, S>(&mut self, predicate: F, sort_key: S) -> Result<(), MmVecError>
     where
-        F: Fn(T) -> O,
+        F: Fn(&T) -> bool,
+        S: Fn(&T) -> O,
         O: Ord,
     {
-        let new_size = self.len() + other.len();
-
-        // SAFETY: this is safe because both vectors are valid
-        let merged = unsafe {
-            let mut dst = Self::with_length_uninit(self.sig(), new_size, path)?;
-            merge_sorted(self.as_slice(), other, dst.as_slice_mut(), sort_key);
-            dst
-        };
-
-        Ok(merged)
-    }
-
-    pub fn sort_unstable_by_key<K, F>(&mut self, f: F)
-    where
-        F: FnMut(&T) -> K,
-        K: Ord,
-    {
-        unsafe { self.as_slice_mut() }.sort_unstable_by_key(f);
-    }
-
-    pub fn binary_search_by_key<B, F>(&self, key: &B, f: F) -> Result<usize, usize>
-    where
-        F: FnMut(&T) -> B,
-        B: Ord,
-    {
-        unsafe { self.as_slice() }.binary_search_by_key(key, f)
+        unsafe {
+            let split = partition(self.data.as_slice_mut(), |el| !predicate(el));
+            self.data.resize(split)?;
+            self.data.as_slice_mut().sort_unstable_by_key(sort_key);
+        }
+        Ok(())
     }
 }
 
 /// Low-level memory-mapped data
 struct Data<T> {
+    file: File,
     header_mmap: MmapMut,
     data_mmap: MmapMut,
     dummy: PhantomData<T>,
@@ -274,6 +236,7 @@ impl<T> Data<T> {
         let header_mmap = mmap(&file, 0, Self::HEADER_SIZE as usize)?;
         let data_mmap = mmap(&file, Self::HEADER_SIZE, (len_bytes - Self::HEADER_SIZE) as usize)?;
         Ok(Self {
+            file,
             header_mmap,
             data_mmap,
             dummy: PhantomData,
@@ -302,6 +265,15 @@ impl<T> Data<T> {
         data.set_len(len as u64);
         data.header_mmap.flush()?;
         Ok(data)
+    }
+
+    pub unsafe fn resize(&mut self, len: usize) -> io::Result<()> {
+        let new_len_bytes = len * std::mem::size_of::<T>();
+        self.data_mmap.flush()?;
+        self.file.set_len(Self::HEADER_SIZE + new_len_bytes as u64)?;
+        self.data_mmap = mmap(&self.file, Self::HEADER_SIZE, new_len_bytes)?;
+        self.set_len(len as u64);
+        Ok(())
     }
 
     pub fn flush(&self) -> io::Result<()> {
@@ -359,8 +331,9 @@ mod tests {
     fn test_data_header_fields() {
         let tmp = tempfile::tempdir().unwrap();
         let test_path = tmp.path().join("test.mmvec");
+        let file = create_new_file(&test_path).unwrap();
+
         unsafe {
-            let file = create_new_file(&test_path).unwrap();
             let mut data = Data::<u64>::new_uninit(file, 42, 100).expect("failed to create data");
             assert_eq!(data.sig(), 42, "sig should be 42!");
             assert_eq!(data.len(), 100, "len should be 100!");
@@ -374,6 +347,66 @@ mod tests {
             assert_eq!(data.sig(), 129, "sig is not preserved!");
             assert_eq!(data.len(), 100, "len is not preserved!");
         }
+    }
+
+    #[test]
+    fn test_data_resize_extend() {
+        let tmp = tempfile::tempdir().unwrap();
+        let test_path = tmp.path().join("test.mmvec");
+        let file = create_new_file(&test_path).unwrap();
+        unsafe {
+            let mut data = Data::<u64>::new_uninit(file, 42, 100).unwrap();
+            assert_eq!(data.len(), 100, "init len should be 100");
+            data.resize(1000).unwrap();
+            assert_eq!(data.len(), 1000, "updated len should be 1000");
+            assert_eq!(
+                data.data_mmap.len(),
+                1000 * std::mem::size_of::<u64>(),
+                "mmap size should correspond to the resized data"
+            );
+            let file2 = open_file(&test_path).unwrap();
+            assert_eq!(
+                file2.metadata().unwrap().len(),
+                Data::<u64>::HEADER_SIZE + 1000 * std::mem::size_of::<u64>() as u64,
+                "file should have corresponding length"
+            );
+        }
+        let file3 = open_file(&test_path).unwrap();
+        assert_eq!(
+            file3.metadata().unwrap().len(),
+            Data::<u64>::HEADER_SIZE + 1000 * std::mem::size_of::<u64>() as u64,
+            "file should have corresponding length after data is closed"
+        );
+    }
+
+    #[test]
+    fn test_data_resize_shrink() {
+        let tmp = tempfile::tempdir().unwrap();
+        let test_path = tmp.path().join("test.mmvec");
+        let file = create_new_file(&test_path).unwrap();
+        unsafe {
+            let mut data = Data::<u64>::new_uninit(file, 42, 100).unwrap();
+            assert_eq!(data.len(), 100, "init len should be 100");
+            data.resize(10).unwrap();
+            assert_eq!(data.len(), 10, "updated len should be 10");
+            assert_eq!(
+                data.data_mmap.len(),
+                10 * std::mem::size_of::<u64>(),
+                "mmap size should correspond to the resized data"
+            );
+            let file2 = open_file(&test_path).unwrap();
+            assert_eq!(
+                file2.metadata().unwrap().len(),
+                Data::<u64>::HEADER_SIZE + 10 * std::mem::size_of::<u64>() as u64,
+                "file should have corresponding length"
+            );
+        }
+        let file3 = open_file(&test_path).unwrap();
+        assert_eq!(
+            file3.metadata().unwrap().len(),
+            Data::<u64>::HEADER_SIZE + 10 * std::mem::size_of::<u64>() as u64,
+            "file should have corresponding length after data is closed"
+        );
     }
 
     #[test]
