@@ -1,11 +1,14 @@
 mod mem_index;
+pub use mem_index::{MemIndex, MemIndexError};
+
+#[cfg(feature = "memmap_index")]
 mod memmap_index;
+#[cfg(feature = "memmap_index")]
+pub use memmap_index::{MemMapIndex, MemMapIndexError};
 
 use std::hash::Hash;
 
 use bit_permute::{BitPermuter, Distance};
-pub use mem_index::{MemIndex, MemIndexError};
-pub use memmap_index::{MemMapIndex, MemMapIndexError};
 
 #[derive(Clone, Copy, Eq, Debug)]
 pub struct SearchResultItem<V> {

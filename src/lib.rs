@@ -12,8 +12,10 @@
 
 pub mod index;
 pub mod lookup;
-pub mod mmvec;
 pub mod util;
+
+#[cfg(feature = "memmap_index")]
+pub mod mmvec;
 
 pub use bit_permute;
 pub use bit_permute_macro::make_permutations;
@@ -57,6 +59,7 @@ macro_rules! init_lookup {
                 hloo::Lookup::new(indexes)
             }
 
+            #[cfg(feature = "memmap_index")]
             pub fn create_memmap_lookup<T: Copy + std::fmt::Debug>(
                 sig: u64,
                 path: &std::path::Path,

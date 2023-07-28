@@ -2,8 +2,11 @@ use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 
-use hloo::index::{Index, MemIndex, MemMapIndex};
+use hloo::index::{Index, MemIndex};
 use hloo::init_lookup;
+
+#[cfg(feature = "memmap_index")]
+use hloo::index::MemMapIndex;
 
 init_lookup!(LookupUtil, 256, 5, 2, 64);
 
@@ -35,40 +38,46 @@ fn index_search_comparison(c: &mut Criterion) {
     println!("preparing data...");
     let data = generate_data(1_000_000);
     let target = generate_target(&data, 3);
+    let mut group = c.benchmark_group("single index - search 1M");
 
-    let tempdir = tempfile::tempdir().unwrap();
     let mut index1 = MemIndex::new(LookupUtil::get(3));
     println!("inserting data into in-memory...");
     index1.insert(&data).unwrap();
-    let mut index2 = MemMapIndex::new(LookupUtil::get(3), 0, tempdir.path().join("test-index")).unwrap();
-    println!("inserting data into mem-mapped...");
-    index2.insert(&data).unwrap();
-
-    let mut group = c.benchmark_group("single index - search 1M");
-
     group.bench_function("in-memory", |b| b.iter(|| index1.search(&target, 3)));
-    group.bench_function("mem-mapped", |b| b.iter(|| index2.search(&target, 3)));
+
+    #[cfg(feature = "memmap_index")]
+    {
+        let tempdir = tempfile::tempdir().unwrap();
+        let mut index2 = MemMapIndex::new(LookupUtil::get(3), 0, tempdir.path().join("test-index")).unwrap();
+        println!("inserting data into mem-mapped...");
+        index2.insert(&data).unwrap();
+        group.bench_function("mem-mapped", |b| b.iter(|| index2.search(&target, 3)));
+    }
 
     group.finish();
 }
 
 fn search_comparison(c: &mut Criterion) {
-    let temp_dir = tempfile::tempdir().unwrap();
     println!("preparing data...");
     let data = generate_data(1_000_000);
     let target = generate_target(&data, 3);
-    println!("inserting data into in-memory...");
-    let mut lookup1 = LookupUtil::create_mem_lookup::<i64>();
-    lookup1.insert(&data).unwrap();
-    println!("inserting data into mem-mapped...");
-    let mut lookup2 = LookupUtil::create_memmap_lookup::<i64>(0, temp_dir.path()).unwrap();
-    lookup2.insert(&data).unwrap();
-
     let mut group = c.benchmark_group("search 1M");
 
     group.bench_function("naive", |b| b.iter(|| hloo::index::scan_block(&data, &target, 3)));
+
+    let mut lookup1 = LookupUtil::create_mem_lookup::<i64>();
+    println!("inserting data into in-memory...");
+    lookup1.insert(&data).unwrap();
     group.bench_function("hloo in-memory", |b| b.iter(|| lookup1.search(&target, 3)));
-    group.bench_function("hloo mem-mapped", |b| b.iter(|| lookup2.search(&target, 3)));
+
+    #[cfg(feature = "memmap_index")]
+    {
+        let temp_dir = tempfile::tempdir().unwrap();
+        println!("inserting data into mem-mapped...");
+        let mut lookup2 = LookupUtil::create_memmap_lookup::<i64>(0, temp_dir.path()).unwrap();
+        lookup2.insert(&data).unwrap();
+        group.bench_function("hloo mem-mapped", |b| b.iter(|| lookup2.search(&target, 3)));
+    }
 
     group.finish();
 }
@@ -85,6 +94,8 @@ fn insert_comparison(c: &mut Criterion) {
             lookup.insert(&data).unwrap();
         })
     });
+
+    #[cfg(feature = "memmap_index")]
     group.bench_function("mem-mapped", |b| {
         b.iter(|| {
             let temp_dir = tempfile::tempdir().unwrap();

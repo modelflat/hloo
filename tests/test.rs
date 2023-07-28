@@ -41,6 +41,7 @@ fn mem_lookup_compiles_and_runs_without_errors() {
     );
 }
 
+#[cfg(feature = "memmap_index")]
 #[test]
 fn memmap_lookup_compiles_and_runs_without_errors() {
     let tmp_path = tempfile::tempdir().unwrap();
@@ -84,6 +85,7 @@ fn mem_lookup_works_correctly() {
     }
 }
 
+#[cfg(feature = "memmap_index")]
 #[test]
 fn memmap_lookup_works_correctly() {
     let tmp_path = tempfile::tempdir().unwrap();
@@ -132,9 +134,14 @@ fn naive_results_correspond_to_hloo() {
 
     let mut lookup_mem = LookupUtil::create_mem_lookup::<i64>();
     lookup_mem.insert(&data).unwrap();
-    let tmp_path = tempfile::tempdir().unwrap();
-    let mut lookup_map = LookupUtil::create_memmap_lookup::<i64>(0, tmp_path.path()).unwrap();
-    lookup_map.insert(&data).unwrap();
+
+    #[cfg(feature = "memmap_index")]
+    let lookup_map = {
+        let tmp_path = tempfile::tempdir().unwrap();
+        let mut lookup_map = LookupUtil::create_memmap_lookup::<i64>(0, tmp_path.path()).unwrap();
+        lookup_map.insert(&data).unwrap();
+        lookup_map
+    };
 
     let expected = hloo::index::scan_block(&data, &target, 3)
         .into_iter()
@@ -152,15 +159,18 @@ fn naive_results_correspond_to_hloo() {
         assert!(expected.contains(&el), "expected item is missing: {:?}", el);
     }
 
-    let result_map = lookup_map.search(&target, 3).unwrap().collect::<HashSet<_>>();
-    assert_eq!(
-        result_map.len(),
-        expected.len(),
-        "incorrect number of results! expected {}, got {}",
-        expected.len(),
-        result_map.len()
-    );
-    for el in result_map {
-        assert!(expected.contains(&el), "expected item is missing: {:?}", el);
+    #[cfg(feature = "memmap_index")]
+    {
+        let result_map = lookup_map.search(&target, 3).unwrap().collect::<HashSet<_>>();
+        assert_eq!(
+            result_map.len(),
+            expected.len(),
+            "incorrect number of results! expected {}, got {}",
+            expected.len(),
+            result_map.len()
+        );
+        for el in result_map {
+            assert!(expected.contains(&el), "expected item is missing: {:?}", el);
+        }
     }
 }
