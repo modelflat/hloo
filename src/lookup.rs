@@ -61,9 +61,8 @@ where
 {
     pub fn create(permuters: Vec<P>, sig: u64, path: &Path) -> Result<Self, I::Error> {
         let mut indexes = Vec::new();
-        assert!(path.is_dir(), "path should be a directory!");
         for (i, p) in permuters.into_iter().enumerate() {
-            let index_path = path.join(format!("index_{:04}.dat", i));
+            let index_path = path.join(format!("index_{:04}_{:016x}.dat", i, sig));
             indexes.push(I::create(p, sig, &index_path)?)
         }
         Ok(Self::new(indexes))
@@ -71,9 +70,8 @@ where
 
     pub fn load(permuters: Vec<P>, sig: u64, path: &Path) -> Result<Self, I::Error> {
         let mut indexes = Vec::new();
-        assert!(path.is_dir(), "path should be a directory!");
         for (i, p) in permuters.into_iter().enumerate() {
-            let index_path = path.join(format!("index_{:04}.dat", i));
+            let index_path = path.join(format!("index_{:04}_{:016x}.dat", i, sig));
             indexes.push(I::load(p, sig, &index_path)?)
         }
         Ok(Self::new(indexes))

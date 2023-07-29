@@ -30,6 +30,15 @@ macro_rules! init_lookup {
         use hloo::bit_permute::{BitPermuter, Distance, DynBitPermuter};
         hloo::make_permutations!(struct_name = "Permutations", f = $f, r = $r, k = $k, w = $w);
 
+        #[doc = "This struct can create or load lookups with the following underlying "]
+        #[doc = "bit permutation parameters: f = "]
+        #[doc = stringify!($f)]
+        #[doc = ", r = "]
+        #[doc = stringify!($r)]
+        #[doc = ", k = "]
+        #[doc = stringify!($k)]
+        #[doc = ", w = "]
+        #[doc = stringify!($w)]
         pub struct $name;
 
         pub type Permuter = DynBitPermuter<Bits, Mask>;
@@ -52,10 +61,6 @@ macro_rules! init_lookup {
                 hasher.write_u64($w);
                 hasher.write_u64(type_sig);
                 hasher.finish()
-            }
-
-            pub fn get(i: usize) -> hloo::bit_permute::DynBitPermuter<Bits, Mask> {
-                Permutations::get_variant(i)
             }
 
             pub fn create_mem_lookup<T>() -> MemLookup<T> {

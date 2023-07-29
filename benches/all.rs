@@ -36,7 +36,7 @@ fn index_search_comparison(c: &mut Criterion) {
     let target = generate_target(&data, 3);
     let mut group = c.benchmark_group("single index - search 1M");
 
-    let mut index1 = MemIndex::new(LookupUtil::get(3));
+    let mut index1 = MemIndex::new(Permutations::get_variant(3));
     println!("inserting data into in-memory...");
     index1.insert(&data).unwrap();
     group.bench_function("in-memory", |b| b.iter(|| index1.search(&target, 3)));
@@ -44,7 +44,7 @@ fn index_search_comparison(c: &mut Criterion) {
     #[cfg(feature = "memmap_index")]
     {
         let tempdir = tempfile::tempdir().unwrap();
-        let mut index2 = MemMapIndex::new(LookupUtil::get(3), 0, tempdir.path().join("test-index")).unwrap();
+        let mut index2 = MemMapIndex::new(Permutations::get_variant(3), 0, tempdir.path().join("test-index")).unwrap();
         println!("inserting data into mem-mapped...");
         index2.insert(&data).unwrap();
         group.bench_function("mem-mapped", |b| b.iter(|| index2.search(&target, 3)));
