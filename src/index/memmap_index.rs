@@ -22,7 +22,10 @@ pub enum MemMapIndexError {
     IoError(#[from] MmVecError),
 }
 
-pub struct MemMapIndex<K, V, M, P> {
+pub struct MemMapIndex<K, V, M, P>
+where
+    (K, V): Copy,
+{
     permuter: P,
     data: MmVec<(K, V)>,
     _dummy: PhantomData<M>,
@@ -60,7 +63,9 @@ where
     type Error = MemMapIndexError;
 
     fn insert(&mut self, items: &[(K, V)]) -> Result<(), Self::Error> {
-        let permuted: Vec<_> = items.iter().map(|(k, v)| (self.permuter.apply(k), *v)).collect();
+        let mut permuted: Vec<_> = items.iter().map(|(k, v)| (self.permuter.apply(k), *v)).collect();
+        // pre-sort the permuted items to create a "two-sorted-sequences" pattern
+        permuted.sort_unstable_by_key(extract_key);
         self.data.insert_sorted(&permuted, extract_key)?;
         Ok(())
     }

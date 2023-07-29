@@ -1,11 +1,10 @@
 use core::slice;
 use std::{
-    fs::{self, File, OpenOptions},
-    io::{self, Seek, SeekFrom, Write},
+    fs::{copy, remove_file, rename, File, OpenOptions},
+    io,
     marker::PhantomData,
-    mem::{size_of, size_of_val},
+    mem::size_of,
     path::{Path, PathBuf},
-    slice::from_raw_parts,
 };
 
 use memmap2::{MmapMut, MmapOptions};
@@ -23,7 +22,10 @@ pub enum MmVecError {
     IoError(#[from] std::io::Error),
 }
 
-pub struct MmVec<T> {
+pub struct MmVec<T>
+where
+    T: Copy,
+{
     data: Option<Data<T>>,
     path: PathBuf,
 }
@@ -102,14 +104,14 @@ where
     }
 
     /// # Safety
-    /// This is unsafe because we can't guarantee that file has not been tampered with.
+    /// This is unsafe because we can't guarantee that the mmapped file has not been tampered with.
     #[must_use]
     pub unsafe fn as_slice(&self) -> &[T] {
         self.data.as_ref().map_or(&[], |d| unsafe { d.as_slice() })
     }
 
     /// # Safety
-    /// This is unsafe because we can't guarantee that file has not been tampered with.
+    /// This is unsafe because we can't guarantee that the mmapped file has not been tampered with.
     #[must_use]
     pub unsafe fn as_slice_mut(&mut self) -> &mut [T] {
         self.data.as_mut().map_or(&mut [], |d| unsafe { d.as_slice_mut() })
@@ -117,22 +119,21 @@ where
 
     /// Flushes memory-mapped data into file.
     pub fn flush(&self) -> Result<(), MmVecError> {
-        let res = self.data.as_ref().map_or(Ok(()), |d| d.flush());
-        Ok(res?)
+        Ok(self.data.as_ref().map_or(Ok(()), |d| d.flush())?)
     }
 
     /// Destroys self, removing the underlying file
     pub fn destroy(self) -> Result<(), MmVecError> {
         let path = self.path.clone();
         drop(self);
-        fs::remove_file(path)?;
+        remove_file(path)?;
         Ok(())
     }
 
     /// Copies self into path, and returns a new vector at this path.
     pub fn copy_to(&self, path: PathBuf) -> Result<Self, MmVecError> {
         self.flush()?;
-        fs::copy(&self.path, &path)?;
+        copy(&self.path, &path)?;
 
         let copied = open_file(&path)?;
         // SAFETY: we just created this file from a valid vector
@@ -143,7 +144,7 @@ where
     /// Moves self into path, and returns a new vector at this path.
     pub fn move_to(self, path: PathBuf) -> Result<Self, MmVecError> {
         self.flush()?;
-        fs::rename(&self.path, &path)?;
+        rename(&self.path, &path)?;
         drop(self);
 
         let moved = open_file(&path)?;
@@ -152,6 +153,7 @@ where
         Ok(Self::new(moved_data, path))
     }
 
+    /// Input sequence should be sorted to ensure best performance, but it is not required.
     pub fn insert_sorted<O, F>(&mut self, items: &[T], sort_key: F) -> Result<(), MmVecError>
     where
         F: Fn(&T) -> O,
@@ -159,8 +161,8 @@ where
     {
         self.flush()?;
         let current_len = self.len();
+        self.resize(current_len + items.len())?;
         unsafe {
-            self.resize(current_len + items.len())?;
             self.as_slice_mut()[current_len..].copy_from_slice(items);
             self.as_slice_mut().sort_unstable_by_key(sort_key);
         }
@@ -204,7 +206,10 @@ where
 }
 
 /// Low-level memory-mapped data
-struct Data<T> {
+struct Data<T>
+where
+    T: Copy,
+{
     #[allow(unused)]
     file: File,
     header_mmap: MmapMut,
@@ -212,7 +217,10 @@ struct Data<T> {
     dummy: PhantomData<T>,
 }
 
-impl<T> Data<T> {
+impl<T> Data<T>
+where
+    T: Copy,
+{
     const HEADER_SIZE: u64 = 16;
 
     fn header_offset(&self, offset: usize) -> *const u8 {
@@ -263,17 +271,16 @@ impl<T> Data<T> {
         })
     }
 
+    #[allow(unused)]
     pub unsafe fn from_file_unchecked_resized(file: File, len: usize) -> io::Result<Self> {
-        let needed_bytes = size_of::<T>() as u64 * len as u64;
-        file.set_len(Self::HEADER_SIZE + needed_bytes)?;
+        resize_file_to_fit::<T>(&file, Self::HEADER_SIZE, len)?;
         let mut data = Self::from_file_unchecked(file)?;
         data.set_len(len as u64);
         Ok(data)
     }
 
     pub unsafe fn new_uninit(file: File, sig: u64, len: u64) -> io::Result<Self> {
-        let needed_bytes = size_of::<T>() as u64 * len;
-        file.set_len(Self::HEADER_SIZE + needed_bytes)?;
+        resize_file_to_fit::<T>(&file, Self::HEADER_SIZE, len as usize)?;
         let mut data = Self::from_file_unchecked(file)?;
         data.set_sig(sig);
         data.set_len(len);
@@ -281,26 +288,21 @@ impl<T> Data<T> {
         Ok(data)
     }
 
-    pub unsafe fn new_with_data(mut file: File, sig: u64, data: &[T]) -> io::Result<Self> {
-        let len = data.len();
-        let bytes = slice_as_bytes(data);
-        file.set_len(Self::HEADER_SIZE + bytes.len() as u64)?;
-        file.seek(SeekFrom::Start(Self::HEADER_SIZE))?;
-        file.write_all(bytes)?;
-        file.flush()?;
+    pub unsafe fn new_with_data(file: File, sig: u64, slice: &[T]) -> io::Result<Self> {
+        resize_file_to_fit::<T>(&file, Self::HEADER_SIZE, slice.len())?;
         let mut data = Self::from_file_unchecked(file)?;
         data.set_sig(sig);
-        data.set_len(len as u64);
+        data.set_len(slice.len() as u64);
+        data.as_slice_mut().copy_from_slice(slice);
         data.header_mmap.flush()?;
         Ok(data)
     }
 
     #[cfg(not(windows))]
     pub unsafe fn resize(&mut self, len: usize) -> io::Result<()> {
-        let new_len_bytes = len * size_of::<T>();
         self.flush()?;
-        self.file.set_len(Self::HEADER_SIZE + new_len_bytes as u64)?;
-        self.data_mmap = mmap(&self.file, Self::HEADER_SIZE, new_len_bytes)?;
+        let new_len_bytes = resize_file_to_fit::<T>(&self.file, Self::HEADER_SIZE, len)?;
+        self.data_mmap = mmap(&self.file, Self::HEADER_SIZE, new_len_bytes as usize)?;
         self.set_len(len as u64);
         Ok(())
     }
@@ -312,7 +314,10 @@ impl<T> Data<T> {
     }
 }
 
-impl<T> Drop for Data<T> {
+impl<T> Drop for Data<T>
+where
+    T: Copy,
+{
     fn drop(&mut self) {
         let _ = self.flush();
     }
@@ -336,10 +341,10 @@ fn open_file(path: &Path) -> io::Result<File> {
         .open(path)
 }
 
-fn slice_as_bytes<T>(data: &[T]) -> &[u8] {
-    let len_bytes = size_of_val(data);
-    // SAFETY: this is a valid slice.
-    unsafe { from_raw_parts(data.as_ptr() as *const u8, len_bytes) }
+fn resize_file_to_fit<T>(file: &File, header_size: u64, len: usize) -> io::Result<u64> {
+    let needed_bytes = size_of::<T>() as u64 * len as u64;
+    file.set_len(header_size + needed_bytes)?;
+    Ok(needed_bytes)
 }
 
 unsafe fn mmap(file: &File, offset: u64, len: usize) -> io::Result<MmapMut> {
