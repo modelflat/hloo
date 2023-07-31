@@ -6,15 +6,14 @@
 //! // 2) Create lookup with the types you need from permuter
 //! let mut lookup = LookupUtil::create_mem_lookup::<i64>();
 //! // 3) Use your lookup
-//! lookup.insert(&[(Bits::new(rand::random()), 123456)]);
-//! lookup.search(&Bits::new(rand::random()), 4);
+//! lookup.insert(&[(Bits::default(), 123456)]);
+//! lookup.search(&Bits::default(), 4);
 //! ```
 
 pub mod index;
 pub mod lookup;
 pub mod util;
 
-#[cfg(feature = "memmap_index")]
 pub mod mmvec;
 
 pub use bit_permute;
@@ -46,9 +45,7 @@ macro_rules! init_lookup {
         pub type MemIndex<T> = hloo::index::MemIndex<Bits, T, Mask, Permuter>;
         pub type MemLookup<T> = hloo::Lookup<Bits, T, Mask, Permuter, MemIndex<T>>;
 
-        #[cfg(feature = "memmap_index")]
         pub type MemMapIndex<T> = hloo::index::MemMapIndex<Bits, T, Mask, Permuter>;
-        #[cfg(feature = "memmap_index")]
         pub type MemMapLookup<T> = hloo::Lookup<Bits, T, Mask, Permuter, MemMapIndex<T>>;
 
         impl $name {
@@ -69,7 +66,6 @@ macro_rules! init_lookup {
                 MemLookup::new(indexes)
             }
 
-            #[cfg(feature = "memmap_index")]
             pub fn create_memmap_lookup<T: Copy>(
                 sig: u64,
                 path: &std::path::Path,
@@ -78,7 +74,6 @@ macro_rules! init_lookup {
                 Ok(MemMapLookup::create(Permutations::get_all_variants(), sig, path)?)
             }
 
-            #[cfg(feature = "memmap_index")]
             pub fn load_memmap_lookup<T: Copy>(
                 sig: u64,
                 path: &std::path::Path,

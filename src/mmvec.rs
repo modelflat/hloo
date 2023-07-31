@@ -42,7 +42,7 @@ where
     unsafe fn with_length_uninit(sig: u64, len: usize, path: PathBuf) -> Result<Self, MmVecError> {
         let file = create_new_file(&path)?;
         // SAFETY: we just created this file
-        let data = unsafe { Data::new_uninit(file, sig, len as u64)? };
+        let data = unsafe { Data::new_uninit(file, sig, len)? };
         Ok(Self::new(data, path))
     }
 
@@ -279,11 +279,11 @@ where
         Ok(data)
     }
 
-    pub unsafe fn new_uninit(file: File, sig: u64, len: u64) -> io::Result<Self> {
-        resize_file_to_fit::<T>(&file, Self::HEADER_SIZE, len as usize)?;
+    pub unsafe fn new_uninit(file: File, sig: u64, len: usize) -> io::Result<Self> {
+        resize_file_to_fit::<T>(&file, Self::HEADER_SIZE, len)?;
         let mut data = Self::from_file_unchecked(file)?;
         data.set_sig(sig);
-        data.set_len(len);
+        data.set_len(len as u64);
         data.header_mmap.flush()?;
         Ok(data)
     }

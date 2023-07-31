@@ -1,8 +1,8 @@
 use std::{marker::PhantomData, path::Path};
 
-use bit_permute::BitPermuter;
+use bit_permute::{BitPermuter, Distance};
 
-use crate::index::{Index, PersistentIndex, SearchResultItem};
+use crate::index::{Index, PersistentIndex, SearchError, SearchResultItem};
 
 pub struct Lookup<K, V, M, P, I> {
     indexes: Vec<I>,
@@ -24,7 +24,9 @@ impl<K, V, M, P, I> Lookup<K, V, M, P, I> {
 
 impl<K, V, M, P, I> Lookup<K, V, M, P, I>
 where
-    K: Ord,
+    K: Distance + Ord,
+    V: Clone,
+    M: Ord,
     P: BitPermuter<K, M>,
     I: Index<K, V, M, P>,
 {
@@ -32,6 +34,7 @@ where
     pub fn insert(&mut self, items: &[(K, V)]) -> Result<(), I::Error> {
         for index in &mut self.indexes {
             index.insert(items)?;
+            index.refresh();
         }
         Ok(())
     }
@@ -40,12 +43,17 @@ where
     pub fn remove(&mut self, keys: &[K]) -> Result<(), I::Error> {
         for index in &mut self.indexes {
             index.remove(keys)?;
+            index.refresh();
         }
         Ok(())
     }
 
     /// Perform a distance search.
-    pub fn search(&self, key: &K, distance: u32) -> Result<impl Iterator<Item = SearchResultItem<V>>, I::Error> {
+    pub fn search(
+        &self,
+        key: &K,
+        distance: u32,
+    ) -> Result<impl Iterator<Item = SearchResultItem<V>>, SearchError<I::Error>> {
         let mut result: Vec<Vec<SearchResultItem<V>>> = Vec::with_capacity(self.indexes.len());
         for index in &self.indexes {
             let index_result = index.search(key, distance)?;

@@ -1,18 +1,13 @@
-use std::{collections::BTreeSet, fmt::Debug, marker::PhantomData};
+use std::{collections::BTreeSet, marker::PhantomData};
 
 use bit_permute::Distance;
-use thiserror::Error;
 
-use super::{compute_index_stats, extract_key, scan_block, select_block_at, BitPermuter, Index, SearchResultItem};
-
-#[derive(Debug, Error)]
-pub enum MemIndexError {
-    #[error("distance ({distance}) exceeds maximum allowed distance for index ({max})")]
-    DistanceExceedsMax { distance: u32, max: u32 },
-}
+use super::{block_locator::BlockLocator, compute_index_stats, extract_key, BitPermuter, Index, IndexStats};
 
 pub struct MemIndex<K, V, M, P> {
     permuter: P,
+    block_locator: BlockLocator,
+    current_stats: IndexStats,
     data: Vec<(K, V)>,
     _dummy: PhantomData<M>,
 }
@@ -26,13 +21,20 @@ where
     pub fn new(permuter: P) -> Self {
         Self {
             permuter,
+            block_locator: BlockLocator::DoubleBsearch,
+            current_stats: IndexStats::default(),
             data: Vec::new(),
             _dummy: PhantomData,
         }
     }
 
-    pub fn data(&self) -> &[(K, V)] {
-        &self.data
+    pub fn update_block_locator(&mut self) {
+        // TODO settings for index
+        if self.current_stats.max_block_size < 5 {
+            self.block_locator = BlockLocator::Naive;
+        } else {
+            self.block_locator = BlockLocator::DoubleBsearch;
+        }
     }
 }
 
@@ -43,7 +45,28 @@ where
     M: Copy + Ord,
     P: BitPermuter<K, M>,
 {
-    type Error = MemIndexError;
+    type Error = ();
+
+    fn data(&self) -> &[(K, V)] {
+        &self.data
+    }
+
+    fn permuter(&self) -> &P {
+        &self.permuter
+    }
+
+    fn block_locator(&self) -> BlockLocator {
+        self.block_locator
+    }
+
+    fn stats(&self) -> &IndexStats {
+        &self.current_stats
+    }
+
+    fn refresh(&mut self) {
+        self.current_stats = compute_index_stats(&self.data, |key| self.permuter.mask(key));
+        self.update_block_locator();
+    }
 
     fn insert(&mut self, items: &[(K, V)]) -> Result<(), Self::Error> {
         let items_permuted = items.iter().map(|(k, v)| (self.permuter.apply(k), *v));
@@ -57,38 +80,14 @@ where
         self.data.retain(|(k, _)| !set.contains(k));
         Ok(())
     }
-
-    fn search(&self, key: &K, distance: u32) -> Result<Vec<SearchResultItem<V>>, Self::Error> {
-        if distance >= self.permuter.n_blocks() {
-            return Err(Self::Error::DistanceExceedsMax {
-                distance,
-                max: self.permuter.n_blocks(),
-            });
-        }
-        let permuted_key = self.permuter.apply(key);
-        let masked_key = self.permuter.mask(&permuted_key);
-        let location = self
-            .data
-            .binary_search_by_key(&masked_key, |(key, _)| self.permuter.mask(key));
-        match location {
-            Ok(pos) => {
-                let block = select_block_at(&self.data, pos, |key| self.permuter.mask(key));
-                let result = scan_block(block, &permuted_key, distance);
-                Ok(result)
-            }
-            Err(_) => Ok(vec![]),
-        }
-    }
-
-    fn stats(&self) -> super::IndexStats {
-        compute_index_stats(&self.data, |key| self.permuter.mask(key))
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use bit_permute::{BitPermuter, Distance, DynBitPermuter};
     use bit_permute_macro::make_permutations;
+
+    use crate::index::SearchResultItem;
 
     use super::*;
 

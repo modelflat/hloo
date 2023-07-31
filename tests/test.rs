@@ -8,14 +8,14 @@ init_lookup!(LookupUtil, 32, 5, 1, 32);
 fn generate_data(n: usize) -> Vec<(Bits, i64)> {
     let mut data = Vec::new();
     for i in 0..n {
-        data.push((Bits::new(rand::random()), i as i64))
+        data.push((Bits::new(data_gen::random()), i as i64))
     }
     data
 }
 
 fn flip_bits(mut bits: Bits, n: usize) -> Bits {
     for _ in 0..n {
-        let pos = (rand::random::<f32>() * 31f32) as usize;
+        let pos = (data_gen::random::<f32>() * 31f32) as usize;
         let bit = (bits.data[0] & (1 << pos)) >> pos;
         if bit == 0 {
             bits.data[0] = bits.data[0] | (1 << pos);
@@ -41,7 +41,6 @@ fn mem_lookup_compiles_and_runs_without_errors() {
     );
 }
 
-#[cfg(feature = "memmap_index")]
 #[test]
 fn memmap_lookup_compiles_and_runs_without_errors() {
     let tmp_path = tempfile::tempdir().unwrap();
@@ -83,7 +82,6 @@ fn mem_lookup_works_correctly() {
     }
 }
 
-#[cfg(feature = "memmap_index")]
 #[test]
 fn memmap_lookup_works_correctly() {
     let tmp_path = tempfile::tempdir().unwrap();
@@ -130,7 +128,6 @@ fn naive_results_correspond_to_hloo() {
     let mut lookup_mem = LookupUtil::create_mem_lookup::<i64>();
     lookup_mem.insert(&data).unwrap();
 
-    #[cfg(feature = "memmap_index")]
     let lookup_map = {
         let tmp_path = tempfile::tempdir().unwrap();
         let mut lookup_map = LookupUtil::create_memmap_lookup::<i64>(0, tmp_path.path()).unwrap();
@@ -154,23 +151,19 @@ fn naive_results_correspond_to_hloo() {
         assert!(expected.contains(&el), "expected item is missing: {:?}", el);
     }
 
-    #[cfg(feature = "memmap_index")]
-    {
-        let result_map = lookup_map.search(&target, 3).unwrap().collect::<HashSet<_>>();
-        assert_eq!(
-            result_map.len(),
-            expected.len(),
-            "incorrect number of results! expected {}, got {}",
-            expected.len(),
-            result_map.len()
-        );
-        for el in result_map {
-            assert!(expected.contains(&el), "expected item is missing: {:?}", el);
-        }
+    let result_map = lookup_map.search(&target, 3).unwrap().collect::<HashSet<_>>();
+    assert_eq!(
+        result_map.len(),
+        expected.len(),
+        "incorrect number of results! expected {}, got {}",
+        expected.len(),
+        result_map.len()
+    );
+    for el in result_map {
+        assert!(expected.contains(&el), "expected item is missing: {:?}", el);
     }
 }
 
-#[cfg(feature = "memmap_index")]
 #[test]
 fn memmap_lookup_can_be_saved_and_loaded() {
     let tmp_path = tempfile::tempdir().unwrap();

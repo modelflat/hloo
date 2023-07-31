@@ -62,6 +62,7 @@ impl ToTokens for Permutation<'_> {
         let data_type_name = self.data_type_name;
         let mask_type_name = self.mask_type_name;
         let n_blocks = self.perm.blocks().len();
+        let mask_bits = self.perm.mask_bits();
 
         let code = quote! {
             #[derive(Clone, Copy)]
@@ -88,6 +89,10 @@ impl ToTokens for Permutation<'_> {
 
                 fn n_blocks(&self) -> u32 {
                     #n_blocks as u32
+                }
+
+                fn mask_bits(&self) -> u32 {
+                    #mask_bits as u32
                 }
             }
         };

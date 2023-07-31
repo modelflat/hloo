@@ -5,28 +5,22 @@ use std::{
 };
 
 use bit_permute::Distance;
-use thiserror::Error;
 
 use crate::mmvec::{MmVec, MmVecError};
 
 use super::{
-    compute_index_stats, extract_key, scan_block, select_block_at, BitPermuter, Index, PersistentIndex,
-    SearchResultItem,
+    block_locator::BlockLocator, compute_index_stats, extract_key, BitPermuter, Index, IndexStats, PersistentIndex,
 };
 
-#[derive(Debug, Error)]
-pub enum MemMapIndexError {
-    #[error("distance ({distance}) exceeds maximum allowed distance for index ({max})")]
-    DistanceExceedsMax { distance: u32, max: u32 },
-    #[error("mmvec error: {0}")]
-    IoError(#[from] MmVecError),
-}
+pub type MemMapIndexError = MmVecError;
 
 pub struct MemMapIndex<K, V, M, P>
 where
     (K, V): Copy,
 {
     permuter: P,
+    block_locator: BlockLocator,
+    current_stats: IndexStats,
     data: MmVec<(K, V)>,
     _dummy: PhantomData<M>,
 }
@@ -35,19 +29,30 @@ impl<K, V, M, P> MemMapIndex<K, V, M, P>
 where
     (K, V): Copy,
 {
-    pub fn new(permuter: P, sig: u64, path: PathBuf) -> Result<Self, MemMapIndexError> {
-        Ok(Self {
+    pub(crate) fn new_with_data(permuter: P, data: MmVec<(K, V)>) -> Self {
+        Self {
             permuter,
-            data: MmVec::new_empty(sig, path)?,
+            block_locator: BlockLocator::DoubleBsearch,
+            current_stats: IndexStats::default(),
+            data,
             _dummy: PhantomData,
-        })
+        }
     }
 
-    pub fn data(&self) -> &[(K, V)] {
-        unsafe { self.data.as_slice() }
+    pub fn new(permuter: P, sig: u64, path: PathBuf) -> Result<Self, MmVecError> {
+        Ok(Self::new_with_data(permuter, MmVec::new_empty(sig, path)?))
     }
 
-    pub fn destroy(self) -> Result<(), MemMapIndexError> {
+    pub fn update_block_locator(&mut self) {
+        // TODO settings for index
+        if self.current_stats.max_block_size < 5 {
+            self.block_locator = BlockLocator::Naive;
+        } else {
+            self.block_locator = BlockLocator::DoubleBsearch;
+        }
+    }
+
+    pub fn destroy(self) -> Result<(), MmVecError> {
         self.data.destroy()?;
         Ok(())
     }
@@ -60,7 +65,28 @@ where
     M: Copy + Ord,
     P: BitPermuter<K, M>,
 {
-    type Error = MemMapIndexError;
+    type Error = MmVecError;
+
+    fn permuter(&self) -> &P {
+        &self.permuter
+    }
+
+    fn block_locator(&self) -> BlockLocator {
+        self.block_locator
+    }
+
+    fn data(&self) -> &[(K, V)] {
+        unsafe { self.data.as_slice() }
+    }
+
+    fn stats(&self) -> &IndexStats {
+        &self.current_stats
+    }
+
+    fn refresh(&mut self) {
+        self.current_stats = compute_index_stats(self.data(), |key| self.permuter.mask(key));
+        self.update_block_locator();
+    }
 
     fn insert(&mut self, items: &[(K, V)]) -> Result<(), Self::Error> {
         let mut permuted: Vec<_> = items.iter().map(|(k, v)| (self.permuter.apply(k), *v)).collect();
@@ -75,56 +101,22 @@ where
         self.data.remove_matching(|(k, _)| set.contains(k), extract_key)?;
         Ok(())
     }
-
-    fn search(&self, key: &K, distance: u32) -> Result<Vec<SearchResultItem<V>>, Self::Error> {
-        if distance >= self.permuter.n_blocks() {
-            return Err(Self::Error::DistanceExceedsMax {
-                distance,
-                max: self.permuter.n_blocks(),
-            });
-        }
-        let permuted_key = self.permuter.apply(key);
-        let masked_key = self.permuter.mask(&permuted_key);
-        let location = self
-            .data()
-            .binary_search_by_key(&masked_key, |(key, _)| self.permuter.mask(key));
-        match location {
-            Ok(pos) => {
-                let block = select_block_at(self.data(), pos, |key| self.permuter.mask(key));
-                let result = scan_block(block, &permuted_key, distance);
-                Ok(result)
-            }
-            Err(_) => Ok(vec![]),
-        }
-    }
-
-    fn stats(&self) -> super::IndexStats {
-        compute_index_stats(self.data(), |key| self.permuter.mask(key))
-    }
 }
 
 impl<K, V, M, P> PersistentIndex<P> for MemMapIndex<K, V, M, P>
 where
     (K, V): Copy,
 {
-    type Error = MemMapIndexError;
+    type Error = MmVecError;
 
     fn create(permuter: P, sig: u64, path: &Path) -> Result<Self, Self::Error> {
         let data = MmVec::new_empty(sig, path.to_path_buf())?;
-        Ok(Self {
-            permuter,
-            data,
-            _dummy: PhantomData,
-        })
+        Ok(Self::new_with_data(permuter, data))
     }
 
     fn load(permuter: P, sig: u64, path: &Path) -> Result<Self, Self::Error> {
         let data = MmVec::from_path(sig, path.to_path_buf())?;
-        Ok(Self {
-            permuter,
-            data,
-            _dummy: PhantomData,
-        })
+        Ok(Self::new_with_data(permuter, data))
     }
 
     fn persist(&self) -> Result<(), Self::Error> {
@@ -137,6 +129,8 @@ where
 mod tests {
     use bit_permute::{BitPermuter, Distance, DynBitPermuter};
     use bit_permute_macro::make_permutations;
+
+    use crate::index::SearchResultItem;
 
     use super::*;
 

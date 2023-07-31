@@ -200,6 +200,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "data_gen"
+version = "0.1.0"
+dependencies = [
+ "itertools 0.11.0",
+ "rand",
+]
+
+[[package]]
 name = "either"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -268,8 +276,8 @@ dependencies = [
  "bit_permute",
  "bit_permute_macro",
  "criterion",
+ "data_gen",
  "memmap2",
- "rand",
  "tempfile",
  "thiserror",
 ]

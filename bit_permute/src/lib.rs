@@ -16,6 +16,9 @@ pub trait BitPermuter<K, M> {
 
     /// Get number of blocks this permuter operates on
     fn n_blocks(&self) -> u32;
+
+    /// Get number of mask bits this permuter has
+    fn mask_bits(&self) -> u32;
 }
 
 #[derive(Clone)]
@@ -36,6 +39,10 @@ impl<K, M> BitPermuter<K, M> for DynBitPermuter<K, M> {
 
     fn n_blocks(&self) -> u32 {
         self.0.n_blocks()
+    }
+
+    fn mask_bits(&self) -> u32 {
+        self.0.mask_bits()
     }
 }
 

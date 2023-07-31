@@ -1,14 +1,24 @@
-mod mem_index;
-pub use mem_index::{MemIndex, MemIndexError};
+mod block_locator;
+pub use block_locator::BlockLocator;
 
-#[cfg(feature = "memmap_index")]
+mod mem_index;
+pub use mem_index::MemIndex;
+
 mod memmap_index;
-#[cfg(feature = "memmap_index")]
 pub use memmap_index::{MemMapIndex, MemMapIndexError};
 
 use std::{hash::Hash, path::Path};
 
 use bit_permute::{BitPermuter, Distance};
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum SearchError<T> {
+    #[error("distance ({distance}) exceeds maximum allowed distance for index ({max})")]
+    DistanceExceedsMax { distance: u32, max: u32 },
+    #[error("index error: {0}")]
+    IndexError(#[from] T),
+}
 
 #[derive(Clone, Copy, Eq, Debug)]
 pub struct SearchResultItem<V> {
@@ -50,10 +60,27 @@ where
 
 pub trait Index<K, V, M, P>
 where
-    K: Ord,
+    K: Distance,
+    M: Ord,
+    V: Clone,
     P: BitPermuter<K, M>,
 {
     type Error;
+
+    /// Get permuter reference.
+    fn permuter(&self) -> &P;
+
+    /// Get currently used BlockLocator.
+    fn block_locator(&self) -> BlockLocator;
+
+    /// Get data as a slice.
+    fn data(&self) -> &[(K, V)];
+
+    /// Get stats for this index.
+    fn stats(&self) -> &IndexStats;
+
+    /// Refresh index: recompute stats etc.
+    fn refresh(&mut self);
 
     /// Insert items into this index.
     fn insert(&mut self, items: &[(K, V)]) -> Result<(), Self::Error>;
@@ -62,10 +89,20 @@ where
     fn remove(&mut self, keys: &[K]) -> Result<(), Self::Error>;
 
     /// Search for an item in this index.
-    fn search(&self, key: &K, distance: u32) -> Result<Vec<SearchResultItem<V>>, Self::Error>;
-
-    /// Compute stats for this index.
-    fn stats(&self) -> IndexStats;
+    fn search(&self, key: &K, distance: u32) -> Result<Vec<SearchResultItem<V>>, SearchError<Self::Error>> {
+        let permuter = self.permuter();
+        if distance >= permuter.n_blocks() {
+            return Err(SearchError::DistanceExceedsMax {
+                distance,
+                max: permuter.n_blocks(),
+            });
+        }
+        let permuted_key = permuter.apply(key);
+        let block = self
+            .block_locator()
+            .locate(self.data(), &permuted_key, |key| permuter.mask(key));
+        Ok(scan_block(block, &permuted_key, distance))
+    }
 }
 
 pub trait PersistentIndex<P>
@@ -87,7 +124,7 @@ pub fn extract_key<K: Copy, V>(item: &(K, V)) -> K {
     item.0
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct IndexStats {
     pub min_block_size: usize,
     pub avg_block_size: usize,
@@ -129,24 +166,6 @@ where
     }
 }
 
-pub fn select_block_at<K, V, M>(data: &[(K, V)], pos: usize, mask_fn: impl Fn(&K) -> M) -> &[(K, V)]
-where
-    K: Copy,
-    V: Copy,
-    M: Ord,
-{
-    let key = mask_fn(&data[pos].0);
-    let mut start = pos;
-    while start > 0 && key == mask_fn(&data[start - 1].0) {
-        start -= 1;
-    }
-    let mut end = pos;
-    while end < data.len() - 1 && key == mask_fn(&data[end + 1].0) {
-        end += 1;
-    }
-    &data[start..=end]
-}
-
 pub fn scan_block<K, V>(data: &[(K, V)], key: &K, distance_threshold: u32) -> Vec<SearchResultItem<V>>
 where
     K: Distance,
@@ -166,85 +185,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use bit_permute::Distance;
-
-    use crate::index::{scan_block, SearchResultItem};
-
-    use super::{compute_index_stats, select_block_at};
+    use super::compute_index_stats;
 
     fn id<T: Copy + Ord>(x: &T) -> T {
         *x
-    }
-
-    struct MyKey(u32);
-
-    impl Distance for MyKey {
-        fn xor_dist(&self, other: &Self) -> u32 {
-            self.0.abs_diff(other.0)
-        }
-    }
-
-    #[test]
-    fn test_scan_block_works_correctly() {
-        let data = vec![
-            (MyKey(1u32), 0),
-            (MyKey(2u32), 1),
-            (MyKey(2u32), 2),
-            (MyKey(3u32), 3),
-            (MyKey(4u32), 4),
-            (MyKey(4u32), 5),
-            (MyKey(4u32), 6),
-        ];
-
-        let res = scan_block(&data, &MyKey(1), 0);
-        assert_eq!(res.len(), 1, "pos 0");
-        assert_eq!(res, vec![SearchResultItem::new(0, 0)], "pos 0 - data");
-        let res = scan_block(&data, &MyKey(1), 1);
-        assert_eq!(res.len(), 3, "pos 0-2");
-        assert_eq!(
-            res,
-            vec![
-                SearchResultItem::new(0, 0),
-                SearchResultItem::new(1, 1),
-                SearchResultItem::new(2, 1),
-            ],
-            "pos 0-2 - data"
-        )
-    }
-
-    #[test]
-    fn test_select_block_at_works_correctly() {
-        let data = vec![
-            (1u32, 0),
-            (2u32, 1),
-            (2u32, 2),
-            (3u32, 3),
-            (4u32, 4),
-            (4u32, 5),
-            (4u32, 6),
-        ];
-
-        let result0 = select_block_at(&data, 0, id);
-        assert_eq!(result0.len(), 1, "pos 0");
-        assert_eq!(result0, &data[0..1], "pos 0 - data");
-        let result0 = select_block_at(&data, 1, id);
-        assert_eq!(result0.len(), 2, "pos 1");
-        assert_eq!(result0, &data[1..3], "pos 1 - data");
-        let result0 = select_block_at(&data, 2, id);
-        assert_eq!(result0.len(), 2, "pos 2");
-        assert_eq!(result0, &data[1..3], "pos 2 - data");
-        let result0 = select_block_at(&data, 3, id);
-        assert_eq!(result0.len(), 1, "pos 3");
-        assert_eq!(result0, &data[3..4], "pos 3 - data");
-        let result0 = select_block_at(&data, 4, id);
-        assert_eq!(result0.len(), 3, "pos 4");
-        assert_eq!(result0, &data[4..7], "pos 4 - data");
-        let result0 = select_block_at(&data, 5, id);
-        assert_eq!(result0.len(), 3, "pos 5");
-        assert_eq!(result0, &data[4..7], "pos 5 - data");
-        let result0 = select_block_at(&data, 6, id);
-        assert_eq!(result0.len(), 3, "pos 6");
-        assert_eq!(result0, &data[4..7], "pos 6 - data");
     }
 
     #[test]
