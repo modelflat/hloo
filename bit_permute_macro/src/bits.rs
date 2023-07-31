@@ -30,6 +30,7 @@ impl ToTokens for Bits<'_> {
         let word_type_name = self.word_type_name;
         let full_size = self.word_size * self.n_words;
         let byte_size = full_size / 8;
+        let word_size = self.word_size;
         let word_bytes = self.word_size / 8;
         let word_range_le = 0..self.n_words;
         let word_range_be = word_range_le.clone();
@@ -65,22 +66,6 @@ impl ToTokens for Bits<'_> {
                     Self { data }
                 }
 
-                pub fn from_iter<I>(it: I) -> Self
-                where
-                    I: Iterator<Item = bool>,
-                {
-                    let mut val = Self::default();
-                    let mut bit: #word_type_name = 1;
-                    for (i, el) in it.enumerate() {
-                        if i == Self::SIZE_BITS {
-                            panic!("iterator is too big for hash of size {}", Self::SIZE_BITS);
-                        }
-                        val.data[i >> 6] |= (el as #word_type_name) * bit;
-                        bit = bit.rotate_left(1);
-                    }
-                    val
-                }
-
                 pub fn from_be_bytes(raw_data: &[u8]) -> Self {
                     if (raw_data.len() != #byte_size) {
                         panic!("should have length {}", #byte_size);
@@ -107,7 +92,29 @@ impl ToTokens for Bits<'_> {
                     Self::new(data)
                 }
 
-                pub fn to_string(&self) -> String {
+                pub fn iter(&self) -> impl Iterator<Item = bool> + '_ {
+                    (0..Self::SIZE_BITS).map(|i| {
+                        let word = i / #word_size;
+                        let bit = (#word_size - 1) - (i % #word_size);
+                        (self.data[word] & (1 << bit) as #word_type_name) != 0
+                    })
+                }
+            }
+
+            impl std::iter::FromIterator<bool> for #type_name {
+                fn from_iter<T: std::iter::IntoIterator<Item = bool>>(iter: T) -> Self {
+                    let mut val = Self::default();
+                    for (i, el) in iter.into_iter().enumerate().take(Self::SIZE_BITS) {
+                        let word = i / #word_size;
+                        let bit = 1 << ((#word_size - 1) - (i % #word_size));
+                        val.data[word] |= (el as #word_type_name) * bit;
+                    }
+                    val
+                }
+            }
+
+            impl std::string::ToString for #type_name {
+                fn to_string(&self) -> String {
                     let mut result = String::with_capacity(#byte_size * 2);
                     for part in self.data {
                         result.push_str(&format!("{:016X}", part))

@@ -175,3 +175,21 @@ fn mask_works_correctly() {
         }
     }
 }
+
+#[test]
+fn iter_works_correctly() {
+    make_permutations!(struct_name = "Permutations", f = 64, r = 5, k = 1, w = 32);
+    let bits = Bits::new([
+        0b10101010101010101010101010101010u32,
+        0b10101010101010101010101010101010u32,
+    ]);
+
+    let res: Vec<_> = bits.iter().enumerate().collect();
+    assert!(
+        res.iter().all(|(i, v)| (i % 2 == 0 && *v) || (i % 2 != 0 && !*v)),
+        "bits.iter does not produce expected result"
+    );
+
+    let reconstructed = Bits::from_iter(res.into_iter().map(|(_, v)| v));
+    assert_eq!(reconstructed, bits, "bits.from_iter is unable to reconstruct bits");
+}
