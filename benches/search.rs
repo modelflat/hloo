@@ -2,11 +2,17 @@ use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 
-use data_gen::{flip_bits, generate_uniform_data_with_block_size, rand_pos};
+use data_gen::{flip_bits, generate_uniform_data, generate_uniform_data_with_block_size, rand_pos};
 
-hloo::init_lookup!(LookupUtil, 256, 5, 2, 64);
+hloo::init_lookup!(LookupUtil, 256, 5, 1, 64);
 
-fn generate_data(n: usize, block_size: usize) -> Vec<(Bits, usize)> {
+#[allow(unused)]
+fn generate_perfect_data(n: usize, _: usize) -> Vec<(Bits, usize)> {
+    generate_uniform_data(n).map(|(k, v)| (Bits::new(k), v)).collect()
+}
+
+#[allow(unused)]
+fn generate_bad_data(n: usize, block_size: usize) -> Vec<(Bits, usize)> {
     generate_uniform_data_with_block_size(n, block_size, false, Bits::new).collect()
 }
 
@@ -17,7 +23,7 @@ fn generate_target(data: &[(Bits, usize)], change_bits: usize) -> Bits {
 
 fn search_bench(c: &mut Criterion) {
     println!("preparing data...");
-    let data = generate_data(1_000_000, 10);
+    let data = generate_perfect_data(1_000_000, 10);
     let target = generate_target(&data, 3);
     let mut group = c.benchmark_group("search 1M");
 

@@ -2,7 +2,7 @@ use std::{marker::PhantomData, path::Path};
 
 use bit_permute::{BitPermuter, Distance};
 
-use crate::index::{Index, PersistentIndex, SearchError, SearchResultItem};
+use crate::index::{scan_block, Index, PersistentIndex, SearchError, SearchResultItem};
 
 pub struct Lookup<K, V, M, P, I> {
     indexes: Vec<I>,
@@ -49,15 +49,23 @@ where
     }
 
     /// Perform a distance search.
-    pub fn search(
-        &self,
-        key: &K,
-        distance: u32,
-    ) -> Result<impl Iterator<Item = SearchResultItem<V>>, SearchError<I::Error>> {
+    pub fn search(&self, key: &K, distance: u32) -> Result<impl Iterator<Item = SearchResultItem<V>>, SearchError> {
+        let min_quality = self
+            .indexes
+            .iter()
+            .map(|index| index.stats().quality())
+            .min()
+            .unwrap_or(0u8);
         let mut result: Vec<Vec<SearchResultItem<V>>> = Vec::with_capacity(self.indexes.len());
-        for index in &self.indexes {
-            let index_result = index.search(key, distance)?;
-            result.push(index_result);
+        // TODO settings, logs
+        if min_quality < 8 {
+            // if there is an index of very low quality, just do a full scan
+            result.push(scan_block(self.indexes[0].data(), key, distance))
+        } else {
+            for index in &self.indexes {
+                let index_result = index.search(key, distance)?;
+                result.push(index_result);
+            }
         }
         Ok(result.into_iter().flatten())
     }

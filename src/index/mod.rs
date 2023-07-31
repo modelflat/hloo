@@ -1,6 +1,9 @@
 mod block_locator;
 pub use block_locator::BlockLocator;
 
+mod stats;
+pub use stats::IndexStats;
+
 mod mem_index;
 pub use mem_index::MemIndex;
 
@@ -13,11 +16,9 @@ use bit_permute::{BitPermuter, Distance};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum SearchError<T> {
+pub enum SearchError {
     #[error("distance ({distance}) exceeds maximum allowed distance for index ({max})")]
     DistanceExceedsMax { distance: u32, max: u32 },
-    #[error("index error: {0}")]
-    IndexError(#[from] T),
 }
 
 #[derive(Clone, Copy, Eq, Debug)]
@@ -89,7 +90,7 @@ where
     fn remove(&mut self, keys: &[K]) -> Result<(), Self::Error>;
 
     /// Search for an item in this index.
-    fn search(&self, key: &K, distance: u32) -> Result<Vec<SearchResultItem<V>>, SearchError<Self::Error>> {
+    fn search(&self, key: &K, distance: u32) -> Result<Vec<SearchResultItem<V>>, SearchError> {
         let permuter = self.permuter();
         if distance >= permuter.n_blocks() {
             return Err(SearchError::DistanceExceedsMax {
@@ -124,48 +125,6 @@ pub fn extract_key<K: Copy, V>(item: &(K, V)) -> K {
     item.0
 }
 
-#[derive(Default, Debug)]
-pub struct IndexStats {
-    pub min_block_size: usize,
-    pub avg_block_size: usize,
-    pub max_block_size: usize,
-    pub n_blocks: usize,
-}
-
-pub fn compute_index_stats<K, V, M>(data: &[(K, V)], mask_fn: impl Fn(&K) -> M) -> IndexStats
-where
-    K: Copy,
-    V: Copy,
-    M: Ord,
-{
-    let mut it = data.iter().map(|(k, _)| mask_fn(k));
-    if let Some(mut prev_key) = it.next() {
-        let mut curr_size = 1usize;
-        let mut n_blocks = 1usize;
-        let mut min = usize::MAX;
-        let mut max = 0;
-        for key in it {
-            if prev_key == key {
-                curr_size += 1;
-            } else {
-                min = min.min(curr_size);
-                max = max.max(curr_size);
-                prev_key = key;
-                n_blocks += 1;
-                curr_size = 1;
-            }
-        }
-        IndexStats {
-            min_block_size: min.min(curr_size),
-            avg_block_size: data.len() / n_blocks,
-            max_block_size: max.max(curr_size),
-            n_blocks,
-        }
-    } else {
-        IndexStats::default()
-    }
-}
-
 pub fn scan_block<K, V>(data: &[(K, V)], key: &K, distance_threshold: u32) -> Vec<SearchResultItem<V>>
 where
     K: Distance,
@@ -181,33 +140,4 @@ where
             }
         })
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::compute_index_stats;
-
-    fn id<T: Copy + Ord>(x: &T) -> T {
-        *x
-    }
-
-    #[test]
-    fn test_compute_index_stats_works_correctly() {
-        let data = vec![
-            (1u32, 0),
-            (2u32, 1),
-            (2u32, 2),
-            (3u32, 3),
-            (3u32, 3),
-            (4u32, 4),
-            (4u32, 5),
-            (4u32, 6),
-        ];
-
-        let stats = compute_index_stats(&data, id);
-        assert_eq!(stats.min_block_size, 1, "min");
-        assert_eq!(stats.avg_block_size, 2, "avg");
-        assert_eq!(stats.max_block_size, 3, "max");
-        assert_eq!(stats.n_blocks, 4, "n");
-    }
 }

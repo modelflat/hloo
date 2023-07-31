@@ -8,9 +8,7 @@ use bit_permute::Distance;
 
 use crate::mmvec::{MmVec, MmVecError};
 
-use super::{
-    block_locator::BlockLocator, compute_index_stats, extract_key, BitPermuter, Index, IndexStats, PersistentIndex,
-};
+use super::{block_locator::BlockLocator, extract_key, BitPermuter, Index, IndexStats, PersistentIndex};
 
 pub type MemMapIndexError = MmVecError;
 
@@ -84,7 +82,7 @@ where
     }
 
     fn refresh(&mut self) {
-        self.current_stats = compute_index_stats(self.data(), |key| self.permuter.mask(key));
+        self.current_stats = IndexStats::from_data(self.data(), |key| self.permuter.mask(key));
         self.update_block_locator();
     }
 

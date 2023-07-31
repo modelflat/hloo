@@ -2,7 +2,7 @@ use std::{collections::BTreeSet, marker::PhantomData};
 
 use bit_permute::Distance;
 
-use super::{block_locator::BlockLocator, compute_index_stats, extract_key, BitPermuter, Index, IndexStats};
+use super::{block_locator::BlockLocator, extract_key, BitPermuter, Index, IndexStats};
 
 pub struct MemIndex<K, V, M, P> {
     permuter: P,
@@ -64,7 +64,7 @@ where
     }
 
     fn refresh(&mut self) {
-        self.current_stats = compute_index_stats(&self.data, |key| self.permuter.mask(key));
+        self.current_stats = IndexStats::from_data(&self.data, |key| self.permuter.mask(key));
         self.update_block_locator();
     }
 
