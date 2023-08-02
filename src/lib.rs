@@ -26,7 +26,7 @@ pub use lookup::Lookup;
 #[macro_export]
 macro_rules! init_lookup {
     ($name:ident,$f:literal,$r:literal,$k:literal,$w:literal) => {
-        use hloo::bit_permute::{BitPermuter, Distance, DynBitPermuter};
+        use hloo::bit_permute::{BitIndex, BitPermuter, Distance, DynBitPermuter};
         hloo::make_permutations!(struct_name = "Permutations", f = $f, r = $r, k = $k, w = $w);
 
         #[doc = "This struct can create or load lookups with the following underlying "]

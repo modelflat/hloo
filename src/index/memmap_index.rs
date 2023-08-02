@@ -125,7 +125,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use bit_permute::{BitPermuter, Distance, DynBitPermuter};
+    use bit_permute::{BitIndex, BitPermuter, Distance, DynBitPermuter};
     use bit_permute_macro::make_permutations;
 
     use crate::index::SearchResultItem;

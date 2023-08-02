@@ -4,6 +4,11 @@ mod permutations;
 pub use bit_block::{BitBlock, BitOp, PermutedBitBlock};
 pub use permutations::{create_permutations, Permutation};
 
+/// std::ops::Index for bits.
+pub trait BitIndex<I> {
+    fn index(&self, idx: I) -> bool;
+}
+
 pub trait BitPermuter<K, M> {
     /// Apply permutation to bit sequence `key`.
     fn apply(&self, key: &K) -> K;

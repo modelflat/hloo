@@ -28,6 +28,7 @@ impl ToTokens for Bits<'_> {
         let type_name = self.type_name;
         let storage_type_name = format_ident!("{}Data", type_name);
         let word_type_name = self.word_type_name;
+        let iterator_name = format_ident!("{}Iterator", type_name);
         let full_size = self.word_size * self.n_words;
         let byte_size = full_size / 8;
         let word_size = self.word_size;
@@ -93,11 +94,56 @@ impl ToTokens for Bits<'_> {
                 }
 
                 pub fn iter(&self) -> impl Iterator<Item = bool> + '_ {
-                    (0..Self::SIZE_BITS).map(|i| {
-                        let word = i / #word_size;
-                        let bit = (#word_size - 1) - (i % #word_size);
-                        (self.data[word] & (1 << bit) as #word_type_name) != 0
-                    })
+                    (0..Self::SIZE_BITS).map(|i| self.get(i))
+                }
+
+                pub fn get(&self, idx: usize) -> bool {
+                    let word = idx / #word_size;
+                    let bit = (#word_size - 1) - (idx % #word_size);
+                    (self.data[word] & (1 << bit) as #word_type_name) != 0
+                }
+            }
+
+            pub struct #iterator_name {
+                data: #type_name,
+                cursor: usize,
+            }
+
+            impl #iterator_name {
+                pub fn new(data: #type_name) -> Self {
+                    Self { data, cursor: 0usize }
+                }
+            }
+
+            impl std::iter::Iterator for #iterator_name {
+                type Item = bool;
+
+                fn next(&mut self) -> Option<Self::Item> {
+                    if self.cursor == #type_name::SIZE_BITS {
+                        None
+                    } else {
+                        let val = self.data.get(self.cursor);
+                        self.cursor += 1;
+                        Some(val)
+                    }
+                }
+            }
+
+            impl std::iter::IntoIterator for #type_name {
+                type Item = bool;
+                type IntoIter = #iterator_name;
+
+                fn into_iter(self) -> Self::IntoIter {
+                    #iterator_name::new(self)
+                }
+            }
+
+            impl std::iter::IntoIterator for &#type_name {
+                type Item = bool;
+                type IntoIter = #iterator_name;
+
+                fn into_iter(self) -> Self::IntoIter {
+                    #iterator_name::new(*self)
                 }
             }
 
@@ -110,6 +156,12 @@ impl ToTokens for Bits<'_> {
                         val.data[word] |= (el as #word_type_name) * bit;
                     }
                     val
+                }
+            }
+
+            impl BitIndex<usize> for #type_name {
+                fn index(&self, idx: usize) -> bool {
+                    self.get(idx)
                 }
             }
 

@@ -1,6 +1,6 @@
 use rand::random;
 
-use bit_permute::{BitPermuter, Distance, DynBitPermuter};
+use bit_permute::{BitIndex, BitPermuter, Distance, DynBitPermuter};
 use bit_permute_macro::make_permutations;
 
 #[test]
