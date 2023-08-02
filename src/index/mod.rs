@@ -59,6 +59,8 @@ where
     }
 }
 
+/// Search index. Equivalent to notion of "table" in
+/// [the paper](https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/33026.pdf)
 pub trait Index<K, V, M, P>
 where
     K: Distance,
@@ -106,6 +108,7 @@ where
     }
 }
 
+/// Index that can be persisted to disk or some other storage.
 pub trait PersistentIndex<P>
 where
     Self: Sized,

@@ -1,10 +1,11 @@
+/// Statistics of the index.
 #[derive(Default, Debug)]
 pub struct IndexStats {
+    pub n_items: usize,
+    pub n_blocks: usize,
     pub min_block_size: usize,
     pub avg_block_size: usize,
     pub max_block_size: usize,
-    pub n_blocks: usize,
-    pub n_items: usize,
 }
 
 impl IndexStats {
@@ -32,19 +33,15 @@ impl IndexStats {
                 }
             }
             IndexStats {
+                n_blocks,
+                n_items: data.len(),
                 min_block_size: min.min(curr_size),
                 avg_block_size: data.len() / n_blocks,
                 max_block_size: max.max(curr_size),
-                n_blocks,
-                n_items: data.len(),
             }
         } else {
             IndexStats::default()
         }
-    }
-
-    pub fn quality(&self) -> u8 {
-        (255f32 * (1f32 - self.max_block_size as f32 / self.n_items as f32)) as u8
     }
 }
 
@@ -70,10 +67,10 @@ mod tests {
         ];
 
         let stats = IndexStats::from_data(&data, id);
+        assert_eq!(stats.n_blocks, 4, "n blocks");
+        assert_eq!(stats.n_items, data.len(), "n items");
         assert_eq!(stats.min_block_size, 1, "min");
         assert_eq!(stats.avg_block_size, 2, "avg");
         assert_eq!(stats.max_block_size, 3, "max");
-        assert_eq!(stats.n_blocks, 4, "n blocks");
-        assert_eq!(stats.n_items, data.len(), "n items");
     }
 }
