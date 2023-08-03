@@ -3,6 +3,7 @@ use std::time::Duration;
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use data_gen::{flip_bits, generate_uniform_data, generate_uniform_data_with_block_size, rand_pos};
+use hloo::index::naive_search;
 
 hloo::init_lookup!(LookupUtil, 256, 5, 1, 64);
 
@@ -27,7 +28,7 @@ fn search_bench(c: &mut Criterion) {
     let target = generate_target(&data, 3);
     let mut group = c.benchmark_group("search 1M");
 
-    group.bench_function("naive", |b| b.iter(|| hloo::index::scan_block(&data, &target, 3)));
+    group.bench_function("naive", |b| b.iter(|| naive_search(&data, target, 3)));
 
     let mut lookup1 = LookupUtil::create_mem_lookup();
     println!("inserting data into in-memory...");

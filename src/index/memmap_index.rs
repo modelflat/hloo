@@ -41,15 +41,6 @@ where
         Ok(Self::new_with_data(permuter, MmVec::new_empty(sig, path)?))
     }
 
-    pub fn update_block_locator(&mut self) {
-        // TODO settings for index
-        if self.current_stats.max_block_size < 5 {
-            self.block_locator = BlockLocator::Naive;
-        } else {
-            self.block_locator = BlockLocator::DoubleBsearch;
-        }
-    }
-
     pub fn destroy(self) -> Result<(), MmVecError> {
         self.data.destroy()?;
         Ok(())
@@ -82,8 +73,7 @@ where
     }
 
     fn refresh(&mut self) {
-        self.current_stats = IndexStats::from_data(self.data(), |key| self.permuter.mask(key));
-        self.update_block_locator();
+        self.current_stats = self.compute_stats();
     }
 
     fn insert(&mut self, items: &[(K, V)]) -> Result<(), Self::Error> {
@@ -128,8 +118,6 @@ mod tests {
     use bit_permute::{BitIndex, BitPermuter, Distance, DynBitPermuter};
     use bit_permute_macro::make_permutations;
 
-    use crate::index::SearchResultItem;
-
     use super::*;
 
     make_permutations!(struct_name = "Permutations", f = 32, r = 5, k = 1, w = 32);
@@ -137,27 +125,20 @@ mod tests {
     // mask width: 32 / 5 ; 2 -> 14
 
     #[test]
-    fn memmap_index_search_works_correctly() {
+    fn memmap_index_search_works_correctly_for_perm0() {
         let tempdir = tempfile::tempdir().expect("failed to create temp dir");
-        for (i, perm) in Permutations::get_all_variants().into_iter().enumerate() {
-            let index_path = tempdir.path().join("storage.bin");
-            let mut index =
-                MemMapIndex::new(perm, 0, index_path.clone()).expect("failed to create memory-mapped vector");
-            index
-                .insert(&[
-                    (Bits::new([0b11111000100010_001000100010001000u32]), 0),
-                    (Bits::new([0b11111000100010_001000100011111000u32]), 2),
-                    (Bits::new([0b11001000111110_001000100010000000u32]), 3),
-                    (Bits::new([0b10011110100010_001000100010001100u32]), 4),
-                ])
-                .unwrap();
-            // NOTE: only distance 0 search can be tested here
-            let result = index
-                .search(&Bits::new([0b11001000111110_001000100010000000u32]), 0)
-                .unwrap();
-            assert_eq!(result.len(), 1, "[{}] number of search results is wrong", i);
-            assert_eq!(result[0], SearchResultItem::new(3, 2), "[{}] search result is wrong", i);
-        }
+        let index_path = tempdir.path().join("storage.bin");
+        let mut index = MemMapIndex::new(Permutations::get_variant(0), 0, index_path.clone())
+            .expect("failed to create memory-mapped vector");
+        let data = [
+            (Bits::new([0b11111000100010_001000100010001000u32]), 0),
+            (Bits::new([0b11111000100010_001000100011111000u32]), 2),
+            (Bits::new([0b11001000111110_001000100010000000u32]), 3),
+            (Bits::new([0b10011110100010_001000100010001100u32]), 4),
+        ];
+        index.insert(&data).unwrap();
+        let result = index.get_candidates(&data[2].0).block;
+        assert_eq!(result, &data[2..3]);
     }
 
     #[test]

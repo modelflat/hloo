@@ -9,13 +9,11 @@ pub struct IndexStats {
 }
 
 impl IndexStats {
-    pub fn from_data<K, V, M>(data: &[(K, V)], mask_fn: impl Fn(&K) -> M) -> Self
+    pub fn from_data<T, M>(data: &[T], mask_fn: impl Fn(&T) -> M) -> Self
     where
-        K: Copy,
-        V: Copy,
         M: Ord,
     {
-        let mut it = data.iter().map(|(k, _)| mask_fn(k));
+        let mut it = data.iter().map(mask_fn);
         if let Some(mut prev_key) = it.next() {
             let mut curr_size = 1usize;
             let mut n_blocks = 1usize;
@@ -49,10 +47,6 @@ impl IndexStats {
 mod tests {
     use super::*;
 
-    fn id<T: Copy + Ord>(x: &T) -> T {
-        *x
-    }
-
     #[test]
     fn test_compute_index_stats_works_correctly() {
         let data = vec![
@@ -66,7 +60,7 @@ mod tests {
             (4u32, 6),
         ];
 
-        let stats = IndexStats::from_data(&data, id);
+        let stats = IndexStats::from_data(&data, |&(k, _)| k);
         assert_eq!(stats.n_blocks, 4, "n blocks");
         assert_eq!(stats.n_items, data.len(), "n items");
         assert_eq!(stats.min_block_size, 1, "min");

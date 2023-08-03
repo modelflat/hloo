@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 
-use hloo::init_lookup;
+use hloo::{
+    index::{Candidates, SearchResultItem},
+    init_lookup,
+};
 
 init_lookup!(LookupUtil, 32, 5, 1, 32);
 // 7 7 6 6 6
@@ -24,6 +27,10 @@ fn flip_bits(mut bits: Bits, n: usize) -> Bits {
         }
     }
     bits
+}
+
+fn naive_search<K: Distance, V: Clone>(data: &[(K, V)], key: K, distance: u32) -> Vec<SearchResultItem<V>> {
+    Candidates::new(key, data).scan(distance)
 }
 
 #[test]
@@ -66,9 +73,7 @@ fn mem_lookup_works_correctly() {
     let data = generate_data(10);
     let target = flip_bits(data[0].0, 3);
     lookup.insert(&data).unwrap();
-    let expected = hloo::index::scan_block(&data, &target, 5)
-        .into_iter()
-        .collect::<HashSet<_>>();
+    let expected = naive_search(&data, target, 5).into_iter().collect::<HashSet<_>>();
     let result = lookup.search(&target, 3).unwrap().collect::<HashSet<_>>();
     assert_eq!(
         result.len(),
@@ -89,9 +94,7 @@ fn memmap_lookup_works_correctly() {
     let data = generate_data(10);
     let target = flip_bits(data[0].0, 3);
     lookup.insert(&data).unwrap();
-    let expected = hloo::index::scan_block(&data, &target, 5)
-        .into_iter()
-        .collect::<HashSet<_>>();
+    let expected = naive_search(&data, target, 5).into_iter().collect::<HashSet<_>>();
     let result = lookup.search(&target, 3).unwrap().collect::<HashSet<_>>();
     assert_eq!(
         result.len(),
@@ -135,9 +138,7 @@ fn naive_results_correspond_to_hloo() {
         lookup_map
     };
 
-    let expected = hloo::index::scan_block(&data, &target, 3)
-        .into_iter()
-        .collect::<HashSet<_>>();
+    let expected = naive_search(&data, target, 3).into_iter().collect::<HashSet<_>>();
 
     let result_mem = lookup_mem.search(&target, 3).unwrap().collect::<HashSet<_>>();
     assert_eq!(
@@ -169,9 +170,7 @@ fn memmap_lookup_can_be_saved_and_loaded() {
     let tmp_path = tempfile::tempdir().unwrap();
     let data = generate_data(10);
     let target = flip_bits(data[0].0, 3);
-    let expected = hloo::index::scan_block(&data, &target, 5)
-        .into_iter()
-        .collect::<HashSet<_>>();
+    let expected = naive_search(&data, target, 5).into_iter().collect::<HashSet<_>>();
 
     {
         let mut lookup = LookupUtil::create_memmap_lookup::<i64>(0, tmp_path.path()).unwrap();

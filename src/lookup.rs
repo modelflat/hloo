@@ -52,8 +52,8 @@ where
     pub fn search(&self, key: &K, distance: u32) -> Result<impl Iterator<Item = SearchResultItem<V>>, SearchError> {
         let mut result: Vec<Vec<SearchResultItem<V>>> = Vec::with_capacity(self.indexes.len());
         for index in &self.indexes {
-            let index_result = index.search(key, distance)?;
-            result.push(index_result);
+            let candidates = index.get_candidates(key);
+            result.push(candidates.scan(distance));
         }
         Ok(result.into_iter().flatten())
     }

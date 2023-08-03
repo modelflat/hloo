@@ -21,6 +21,43 @@ pub enum SearchError {
     DistanceExceedsMax { distance: u32, max: u32 },
 }
 
+/// Represents a single block of potential candidates for a distance search.
+pub struct Candidates<'a, K, V> {
+    key: K,
+    block: &'a [(K, V)],
+}
+
+impl<'a, K, V> Candidates<'a, K, V>
+where
+    K: Distance,
+    V: Clone,
+{
+    pub fn new(key: K, block: &'a [(K, V)]) -> Self {
+        Self { key, block }
+    }
+
+    /// How many candidates there are.
+    pub fn len(&self) -> usize {
+        self.block.len()
+    }
+
+    /// Performs a full scan of candidates and returns results.
+    pub fn scan(&self, distance: u32) -> Vec<SearchResultItem<V>> {
+        self.block
+            .iter()
+            .filter_map(move |(this_key, value)| {
+                let dist = this_key.xor_dist(&self.key);
+                if dist <= distance {
+                    Some(SearchResultItem::new(value.clone(), dist))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+}
+
+///
 #[derive(Clone, Copy, Eq, Debug)]
 pub struct SearchResultItem<V> {
     data: V,
@@ -91,20 +128,21 @@ where
     /// Remove items from this index.
     fn remove(&mut self, keys: &[K]) -> Result<(), Self::Error>;
 
-    /// Search for an item in this index.
-    fn search(&self, key: &K, distance: u32) -> Result<Vec<SearchResultItem<V>>, SearchError> {
+    /// Retrieve candidates for a given search.
+    fn get_candidates<'a>(&'a self, key: &K) -> Candidates<'a, K, V> {
         let permuter = self.permuter();
-        if distance >= permuter.n_blocks() {
-            return Err(SearchError::DistanceExceedsMax {
-                distance,
-                max: permuter.n_blocks(),
-            });
-        }
         let permuted_key = permuter.apply(key);
+        let masked_key = permuter.mask(&permuted_key);
         let block = self
             .block_locator()
-            .locate(self.data(), &permuted_key, |key| permuter.mask(key));
-        Ok(scan_block(block, &permuted_key, distance))
+            .locate_by(self.data(), |(key, _)| permuter.mask(key).cmp(&masked_key));
+        Candidates::new(permuted_key, block)
+    }
+
+    /// Compute stats for this index.
+    fn compute_stats(&self) -> IndexStats {
+        let permuter = self.permuter();
+        IndexStats::from_data(self.data(), |(key, _)| permuter.mask(key))
     }
 }
 
@@ -128,19 +166,49 @@ pub fn extract_key<K: Copy, V>(item: &(K, V)) -> K {
     item.0
 }
 
-pub fn scan_block<K, V>(data: &[(K, V)], key: &K, distance_threshold: u32) -> Vec<SearchResultItem<V>>
-where
-    K: Distance,
-    V: Clone,
-{
-    data.iter()
-        .filter_map(move |(this_key, value)| {
-            let dist = this_key.xor_dist(key);
-            if dist <= distance_threshold {
-                Some(SearchResultItem::new(value.clone(), dist))
-            } else {
-                None
-            }
-        })
-        .collect()
+/// Perform a naive distance search for a key with a given distance.
+pub fn naive_search<K: Distance, V: Clone>(data: &[(K, V)], key: K, distance: u32) -> Vec<SearchResultItem<V>> {
+    Candidates::new(key, data).scan(distance)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct MyKey(u32);
+
+    impl Distance for MyKey {
+        fn xor_dist(&self, other: &Self) -> u32 {
+            self.0.abs_diff(other.0)
+        }
+    }
+
+    #[test]
+    fn test_candidate_scan_works_correctly() {
+        let data = vec![
+            (MyKey(1u32), 0),
+            (MyKey(2u32), 1),
+            (MyKey(2u32), 2),
+            (MyKey(3u32), 3),
+            (MyKey(4u32), 4),
+            (MyKey(4u32), 5),
+            (MyKey(4u32), 6),
+        ];
+        let candidates = Candidates::new(MyKey(1), &data);
+
+        let res = candidates.scan(0);
+        assert_eq!(res.len(), 1, "pos 0");
+        assert_eq!(res, vec![SearchResultItem::new(0, 0)], "pos 0 - data");
+        let res = candidates.scan(1);
+        assert_eq!(res.len(), 3, "pos 0-2");
+        assert_eq!(
+            res,
+            vec![
+                SearchResultItem::new(0, 0),
+                SearchResultItem::new(1, 1),
+                SearchResultItem::new(2, 1),
+            ],
+            "pos 0-2 - data"
+        )
+    }
 }

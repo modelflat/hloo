@@ -26,15 +26,10 @@ fn locate_block_bench(c: &mut Criterion) {
         let data = generate_data(data_size, n_blocks);
         let mut inputs_iter = generate_targets(&data, 100000);
 
-        group.bench_function(format!("bsearch+scan, blocks: {}", n_blocks), |b| {
+        group.bench_function(format!("blocks: {}", n_blocks), |b| {
             b.iter(|| {
-                BlockLocator::Naive.locate(&data, &inputs_iter.next().unwrap(), |x| *x);
-            })
-        });
-
-        group.bench_function(format!("double bsearch, blocks: {}", n_blocks), |b| {
-            b.iter(|| {
-                BlockLocator::DoubleBsearch.locate(&data, &inputs_iter.next().unwrap(), |x| *x);
+                let key = inputs_iter.next().unwrap();
+                BlockLocator::DoubleBsearch.locate_by(&data, |&(x, _)| x.cmp(&key));
             })
         });
     }

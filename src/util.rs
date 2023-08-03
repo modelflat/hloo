@@ -12,7 +12,7 @@ where
 }
 
 /// Performs exponential search.
-pub fn exp_search<T, F>(data: &[T], f: F) -> Result<usize, usize>
+pub fn exp_search_by<T, F>(data: &[T], f: F) -> Result<usize, usize>
 where
     F: Fn(&T) -> Ordering,
 {
@@ -29,7 +29,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{exp_search, partition};
+    use super::{exp_search_by, partition};
 
     #[test]
     fn partition_vector() {
@@ -42,17 +42,17 @@ mod tests {
     #[test]
     fn exponential_search_works_correctly() {
         let data = vec![0, 3, 4, 6, 7];
-        let res = exp_search(&data, |el| el.cmp(&0));
+        let res = exp_search_by(&data, |el| el.cmp(&0));
         assert_eq!(res, Ok(0), "0");
-        let res = exp_search(&data, |el| el.cmp(&3));
+        let res = exp_search_by(&data, |el| el.cmp(&3));
         assert_eq!(res, Ok(1), "3");
-        let res = exp_search(&data, |el| el.cmp(&5));
+        let res = exp_search_by(&data, |el| el.cmp(&5));
         assert_eq!(res, Err(3), "5");
-        let res = exp_search(&data, |el| el.cmp(&1000));
+        let res = exp_search_by(&data, |el| el.cmp(&1000));
         assert_eq!(res, Err(5), "1000");
-        let res = exp_search(&data, |el| el.cmp(&-1000));
+        let res = exp_search_by(&data, |el| el.cmp(&-1000));
         assert_eq!(res, Err(0), "-1000");
-        let res = exp_search(&data[0..0], |_| panic!("this should not be called"));
+        let res = exp_search_by(&data[0..0], |_| panic!("this should not be called"));
         assert_eq!(res, Err(0), "empty");
     }
 }

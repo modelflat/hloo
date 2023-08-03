@@ -27,15 +27,6 @@ where
             _dummy: PhantomData,
         }
     }
-
-    pub fn update_block_locator(&mut self) {
-        // TODO settings for index
-        if self.current_stats.max_block_size < 5 {
-            self.block_locator = BlockLocator::Naive;
-        } else {
-            self.block_locator = BlockLocator::DoubleBsearch;
-        }
-    }
 }
 
 impl<K, V, M, P> Index<K, V, M, P> for MemIndex<K, V, M, P>
@@ -64,8 +55,7 @@ where
     }
 
     fn refresh(&mut self) {
-        self.current_stats = IndexStats::from_data(&self.data, |key| self.permuter.mask(key));
-        self.update_block_locator();
+        self.current_stats = self.compute_stats();
     }
 
     fn insert(&mut self, items: &[(K, V)]) -> Result<(), Self::Error> {
@@ -87,29 +77,23 @@ mod tests {
     use bit_permute::{BitIndex, BitPermuter, Distance, DynBitPermuter};
     use bit_permute_macro::make_permutations;
 
-    use crate::index::SearchResultItem;
-
     use super::*;
 
-    make_permutations!(struct_name = "Permutations", f = 32, r = 5, k = 2, w = 32);
+    make_permutations!(struct_name = "Permutations", f = 32, r = 5, k = 1, w = 32);
     // blocks: 7 7 6 6 6
     // mask width: 32 / 5 ; 2 -> 14
 
     #[test]
-    fn test_mem_index_search_works() {
+    fn test_mem_index_search_works_for_perm0() {
         let mut index = MemIndex::new(Permutations::get_variant(0));
-        index
-            .insert(&[
-                (Bits::new([0b11111000100010_001000100010001000u32]), 0),
-                (Bits::new([0b11111000100010_001000100011111000u32]), 2),
-                (Bits::new([0b11001000111110_001000100010001010u32]), 3),
-                (Bits::new([0b10011110100010_001000100010001100u32]), 4),
-            ])
-            .unwrap();
-        let result = index
-            .search(&Bits::new([0b11001000111110_001011100010001010u32]), 2)
-            .unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], SearchResultItem::new(3, 2))
+        let data = [
+            (Bits::new([0b11111000100010_001000100010001000u32]), 0),
+            (Bits::new([0b11111000100010_001000100011111000u32]), 2),
+            (Bits::new([0b11001000111110_001000100010001010u32]), 3),
+            (Bits::new([0b10011110100010_001000100010001100u32]), 4),
+        ];
+        index.insert(&data).unwrap();
+        let result = index.get_candidates(&data[2].0).block;
+        assert_eq!(result, &data[2..3]);
     }
 }
