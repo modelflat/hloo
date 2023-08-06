@@ -36,7 +36,7 @@ pub fn generate_uniform_data_with_block_size<T>(
         .map(move |(k, v)| (map_to(k), v))
 }
 
-pub fn flip_bits(mut bits: [u64; 4], n: usize) -> [u64; 4] {
+pub fn flip_bits<const S: usize>(mut bits: [u64; S], n: usize) -> [u64; S] {
     for _ in 0..n {
         let pos = (rand::random::<f32>() * 31f32) as usize;
         let bit = (bits[0] & (1 << pos)) >> pos;

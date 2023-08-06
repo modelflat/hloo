@@ -1,8 +1,6 @@
 use std::cmp::Ordering;
 
-use crate::util::exp_search_by;
-
-/// Locates continuous blocks in sorted slice.
+/// Locates continuous blocks in sorted slices.
 #[derive(Clone, Copy, Debug)]
 pub enum BlockLocator {
     /// Performs well on any block size.
@@ -11,35 +9,52 @@ pub enum BlockLocator {
 
 impl BlockLocator {
     #[inline(always)]
-    pub fn locate_by<'a, T>(&'_ self, data: &'a [T], f: impl Fn(&T) -> Ordering) -> &'a [T] {
+    pub fn locate_by<'a, T>(&'_ self, slice: &'a [T], f: impl Fn(&T) -> Ordering) -> &'a [T] {
         match self {
-            BlockLocator::DoubleBsearch => locate_block_double_bsearch(data, f),
+            BlockLocator::DoubleBsearch => locate_block_double_bsearch(slice, f),
         }
     }
 }
 
-fn locate_block_double_bsearch<'a, T>(data: &'a [T], f: impl Fn(&T) -> Ordering) -> &'a [T] {
-    let maybe_block_start = data.binary_search_by(|el| {
+/// Search for a contiguous sequence using binary search.
+fn locate_block_double_bsearch<'a, T>(slice: &'a [T], f: impl Fn(&T) -> Ordering) -> &'a [T] {
+    let maybe_block_start = slice.binary_search_by(|el| {
         // 0 0 2 2 2 3 4 5 13
         //     ^st ^end
         f(el).then(Ordering::Greater)
     });
     match maybe_block_start {
         Ok(_) => unreachable!("not possible to find element with a comparator fn that never returns Equals"),
-        Err(pos) if pos < data.len() && f(&data[pos]).is_eq() => {
-            let block_end = exp_search_by(&data[pos..], |el| {
+        Err(pos) if pos < slice.len() && f(&slice[pos]).is_eq() => {
+            // exp_search performs best when blocks are small, otherwise binary_search is better
+            let block_end = exp_search_by(&slice[pos..], |el| {
                 // 0 0 2 2 2 3 4 5 13
                 //     ^st ^end
                 f(el).then(Ordering::Less)
             });
-            let block_end = match block_end {
+            match block_end {
                 Ok(_) => unreachable!("not possible to find element with a comparator fn that never returns Equals"),
-                Err(pos) => pos,
-            };
-            &data[pos..(pos + block_end).min(data.len())]
+                Err(block_end) => &slice[pos..(pos + block_end).min(slice.len())],
+            }
         }
-        Err(_) => &data[0..0],
+        Err(_) => &slice[0..0],
     }
+}
+
+/// Performs exponential search.
+fn exp_search_by<T, F>(data: &[T], f: F) -> Result<usize, usize>
+where
+    F: Fn(&T) -> Ordering,
+{
+    let mut bound = 1;
+    while bound < data.len() && matches!(f(&data[bound]), Ordering::Less) {
+        bound <<= 1;
+    }
+    let start = bound >> 1;
+    data[start..data.len().min(bound + 1)]
+        .binary_search_by(f)
+        .map(|i| i + start)
+        .map_err(|i| i + start)
 }
 
 #[cfg(test)]
@@ -76,5 +91,22 @@ mod tests {
         let res = locate_block_double_bsearch(&data, |(k, _)| k.cmp(&0));
         assert_eq!(res.len(), 0, "key = 0");
         assert_eq!(res, &data[0..0], "key = 0 - data");
+    }
+
+    #[test]
+    fn exponential_search_works_correctly() {
+        let data = vec![0, 3, 4, 6, 7];
+        let res = exp_search_by(&data, |el| el.cmp(&0));
+        assert_eq!(res, Ok(0), "0");
+        let res = exp_search_by(&data, |el| el.cmp(&3));
+        assert_eq!(res, Ok(1), "3");
+        let res = exp_search_by(&data, |el| el.cmp(&5));
+        assert_eq!(res, Err(3), "5");
+        let res = exp_search_by(&data, |el| el.cmp(&1000));
+        assert_eq!(res, Err(5), "1000");
+        let res = exp_search_by(&data, |el| el.cmp(&-1000));
+        assert_eq!(res, Err(0), "-1000");
+        let res = exp_search_by(&data[0..0], |_| panic!("this should not be called"));
+        assert_eq!(res, Err(0), "empty");
     }
 }

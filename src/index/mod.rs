@@ -13,13 +13,6 @@ pub use memmap_index::{MemMapIndex, MemMapIndexError};
 use std::{hash::Hash, path::Path};
 
 use bit_permute::{BitPermuter, Distance};
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum SearchError {
-    #[error("distance ({distance}) exceeds maximum allowed distance for index ({max})")]
-    DistanceExceedsMax { distance: u32, max: u32 },
-}
 
 /// Represents a single block of potential candidates for a distance search.
 pub struct Candidates<'a, K, V> {
@@ -39,6 +32,10 @@ where
     /// How many candidates there are.
     pub fn len(&self) -> usize {
         self.block.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.block.is_empty()
     }
 
     /// Performs a full scan of candidates and returns results.

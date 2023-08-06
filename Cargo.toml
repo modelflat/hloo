@@ -22,7 +22,11 @@ default-features = false
 features = ["cargo_bench_support", "html_reports"]
 
 [[bench]]
-name = "search"
+name = "search64"
+harness = false
+
+[[bench]]
+name = "search256"
 harness = false
 
 [[bench]]

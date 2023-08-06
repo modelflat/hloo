@@ -1,8 +1,30 @@
-use std::{marker::PhantomData, path::Path};
+use std::{collections::HashSet, hash::Hash, marker::PhantomData, path::Path};
 
 use bit_permute::{BitPermuter, Distance};
 
-use crate::index::{Index, PersistentIndex, SearchError, SearchResultItem};
+use crate::index::{Index, PersistentIndex, SearchResultItem};
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum SearchError {
+    #[error("distance ({distance}) exceeds maximum allowed distance for this candidate set ({max})")]
+    DistanceExceedsMax { distance: u32, max: u32 },
+}
+
+pub struct SearchResult<V> {
+    pub candidates_scanned: usize,
+    pub result: Vec<Vec<SearchResultItem<V>>>,
+}
+
+impl<V> SearchResult<V> {
+    pub fn iter(&self) -> impl Iterator<Item = &SearchResultItem<V>> {
+        self.result.iter().flatten()
+    }
+
+    pub fn into_iter(self) -> impl Iterator<Item = SearchResultItem<V>> {
+        self.result.into_iter().flatten()
+    }
+}
 
 pub struct Lookup<K, V, M, P, I> {
     indexes: Vec<I>,
@@ -30,6 +52,10 @@ where
     P: BitPermuter<K, M>,
     I: Index<K, V, M, P>,
 {
+    pub fn max_search_distance(&self) -> u32 {
+        self.indexes[0].permuter().n_blocks() - 1
+    }
+
     /// Insert items into this lookup.
     pub fn insert(&mut self, items: &[(K, V)]) -> Result<(), I::Error> {
         for index in &mut self.indexes {
@@ -49,13 +75,35 @@ where
     }
 
     /// Perform a distance search.
-    pub fn search(&self, key: &K, distance: u32) -> Result<impl Iterator<Item = SearchResultItem<V>>, SearchError> {
+    pub fn search(&self, key: &K, distance: u32) -> Result<SearchResult<V>, SearchError> {
+        let max_distance = self.max_search_distance();
+        if distance > max_distance {
+            return Err(SearchError::DistanceExceedsMax {
+                distance,
+                max: max_distance,
+            });
+        }
+        let mut candidates_scanned = 0usize;
         let mut result: Vec<Vec<SearchResultItem<V>>> = Vec::with_capacity(self.indexes.len());
         for index in &self.indexes {
             let candidates = index.get_candidates(key);
+            candidates_scanned += candidates.len();
             result.push(candidates.scan(distance));
         }
-        Ok(result.into_iter().flatten())
+        Ok(SearchResult {
+            candidates_scanned,
+            result,
+        })
+    }
+
+    pub fn search_simple(&self, key: &K, distance: u32) -> HashSet<SearchResultItem<V>>
+    where
+        V: Hash + Eq,
+    {
+        self.search(key, distance)
+            .expect("distance exceeds max")
+            .into_iter()
+            .collect()
     }
 }
 
