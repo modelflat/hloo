@@ -38,7 +38,8 @@ where
     }
 
     pub fn new(permuter: P, sig: u64, path: PathBuf) -> Result<Self, MmVecError> {
-        Ok(Self::new_with_data(permuter, MmVec::new_empty(sig, path)?))
+        let data = unsafe { MmVec::new_empty(sig, path)? };
+        Ok(Self::new_with_data(permuter, data))
     }
 
     pub fn destroy(self) -> Result<(), MmVecError> {
@@ -80,13 +81,19 @@ where
         let mut permuted: Vec<_> = items.iter().map(|(k, v)| (self.permuter.apply(k), *v)).collect();
         // pre-sort the permuted items to create a "two-sorted-sequences" pattern
         permuted.sort_unstable_by_key(extract_key);
-        self.data.insert_sorted(&permuted, extract_key)?;
+        // SAFETY: ???
+        unsafe {
+            self.data.insert_sorted(&permuted, extract_key)?;
+        }
         Ok(())
     }
 
     fn remove(&mut self, keys: &[K]) -> Result<(), Self::Error> {
         let set: BTreeSet<_> = keys.iter().map(|k| self.permuter.apply(k)).collect();
-        self.data.remove_matching(|(k, _)| set.contains(k), extract_key)?;
+        // SAFETY: ???
+        unsafe {
+            self.data.remove_matching(|(k, _)| set.contains(k), extract_key)?;
+        }
         Ok(())
     }
 }
@@ -98,12 +105,14 @@ where
     type Error = MmVecError;
 
     fn create(permuter: P, sig: u64, path: &Path) -> Result<Self, Self::Error> {
-        let data = MmVec::new_empty(sig, path.to_path_buf())?;
+        // SAFETY: ???
+        let data = unsafe { MmVec::new_empty(sig, path.to_path_buf())? };
         Ok(Self::new_with_data(permuter, data))
     }
 
     fn load(permuter: P, sig: u64, path: &Path) -> Result<Self, Self::Error> {
-        let data = MmVec::from_path(sig, path.to_path_buf())?;
+        // SAFETY: ???
+        let data = unsafe { MmVec::from_path(sig, path.to_path_buf())? };
         Ok(Self::new_with_data(permuter, data))
     }
 

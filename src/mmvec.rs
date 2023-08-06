@@ -41,77 +41,97 @@ where
     /// Creates an uninitialized vector with given length.
     unsafe fn with_length_uninit(sig: u64, len: usize, path: PathBuf) -> Result<Self, MmVecError> {
         let file = create_new_file(&path)?;
-        // SAFETY: we just created this file
-        let data = unsafe { Data::new_uninit(file, sig, len)? };
+        let data = Data::new_uninit(file, sig, len)?;
         Ok(Self::new(data, path))
     }
 
-    pub fn new_empty(sig: u64, path: PathBuf) -> Result<Self, MmVecError> {
-        unsafe { Self::with_length_uninit(sig, 0, path) }
+    /// Creates a new, empty vector.
+    ///
+    /// ## Safety
+    /// Creating mmap is unsafe. We cannot guarantee that the file has not been tampered with between its creation
+    /// and mmapping.
+    pub unsafe fn new_empty(sig: u64, path: PathBuf) -> Result<Self, MmVecError> {
+        Self::with_length_uninit(sig, 0, path)
     }
 
-    /// Dumps a regular in-memory vector into path, then mmaps it.
-    pub fn from_vec(sig: u64, vec: Vec<T>, path: PathBuf) -> Result<Self, MmVecError> {
+    /// Dumps a slice into path, then mmaps it.
+    ///
+    /// ## Safety
+    /// Creating mmap is unsafe.
+    pub unsafe fn from_slice(sig: u64, slice: &[T], path: PathBuf) -> Result<Self, MmVecError> {
         let file = create_new_file(&path)?;
-        // SAFETY: we just created this file
-        let data = unsafe { Data::new_with_data(file, sig, &vec)? };
+        let data = Data::new_with_data(file, sig, slice)?;
         Ok(Self::new(data, path))
     }
 
-    /// Try to create a vector from the given path. Panic if the signature does not match
-    pub fn from_path(sig: u64, path: PathBuf) -> Result<Self, MmVecError> {
+    /// Try to create a vector from the given path. Returns error if the signature does not match, or if
+    /// the vector is not completely initialized.
+    ///
+    /// ## Safety
+    /// While we do check signature and length, this is still unsafe since we can't guarantee
+    /// that the mmapped file has not been tampered with.
+    pub unsafe fn from_path(sig: u64, path: PathBuf) -> Result<Self, MmVecError> {
         let file = open_file(&path)?;
-        // SAFETY: we are going to check the data
-        let data = unsafe {
-            let data = Data::<T>::from_file_unchecked(file)?;
-            if data.sig() != sig {
-                return Err(MmVecError::SignatureMismatch {
-                    expected: sig,
-                    actual: data.sig(),
-                });
-            }
-            // only whole-file, fully initialized vectors are supported
-            if data.len() != data.capacity() as u64 {
-                return Err(MmVecError::UninitializedVectorLoad {});
-            }
-            data
-        };
+        let data = Data::<T>::from_file_unchecked(file)?;
+        if data.sig() != sig {
+            return Err(MmVecError::SignatureMismatch {
+                expected: sig,
+                actual: data.sig(),
+            });
+        }
+        // only whole-file, fully initialized vectors are supported
+        if data.len() != data.capacity() as u64 {
+            return Err(MmVecError::UninitializedVectorLoad {});
+        }
         Ok(Self::new(data, path))
     }
 
-    /// Returns a path to the backing file.
+    /// Path to the backing file.
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
     }
 
-    /// Returns length of the vector.
+    /// Length of this vector.
+    ///
+    /// ## Safety
+    /// Unsafe since we can't guarantee that the mmapped file has not been tampered with
     #[must_use]
-    pub fn len(&self) -> usize {
-        self.data.as_ref().map_or(0, |d| unsafe { d.len() as usize })
+    pub unsafe fn len(&self) -> usize {
+        self.data.as_ref().map_or(0, |d| d.len() as usize)
     }
 
-    /// Returns the signature of the vector.
+    /// Signature of this vector.
+    ///
+    /// ## Safety
+    /// Unsafe since we can't guarantee that the mmapped file has not been tampered with
     #[must_use]
-    pub fn sig(&self) -> u64 {
-        self.data.as_ref().map_or(u64::MAX, |d| unsafe { d.sig() })
+    pub unsafe fn sig(&self) -> u64 {
+        self.data.as_ref().map_or(u64::MAX, |d| d.sig())
     }
 
     /// Whether this vector is empty.
+    ///
+    /// ## Safety
+    /// Unsafe since we can't guarantee that the mmapped file has not been tampered with
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub unsafe fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// # Safety
-    /// This is unsafe because we can't guarantee that the mmapped file has not been tampered with.
+    /// Get contents as a slice.
+    ///
+    /// ## Safety
+    /// Unsafe since we can't guarantee that the mmapped file has not been tampered with.
     #[must_use]
     pub unsafe fn as_slice(&self) -> &[T] {
         self.data.as_ref().map_or(&[], |d| unsafe { d.as_slice() })
     }
 
-    /// # Safety
-    /// This is unsafe because we can't guarantee that the mmapped file has not been tampered with.
+    /// Get contents as a mutable slice.
+    ///
+    /// ## Safety
+    /// Unsafe since we can't guarantee that the mmapped file has not been tampered with.
     #[must_use]
     pub unsafe fn as_slice_mut(&mut self) -> &mut [T] {
         self.data.as_mut().map_or(&mut [], |d| unsafe { d.as_slice_mut() })
@@ -122,39 +142,49 @@ where
         Ok(self.data.as_ref().map_or(Ok(()), |d| d.flush())?)
     }
 
-    /// Destroys self, removing the underlying file
-    pub fn destroy(self) -> Result<(), MmVecError> {
+    /// Destroys self, removing the underlying file.
+    pub fn destroy(mut self) -> Result<(), MmVecError> {
         let path = self.path.clone();
-        drop(self);
+        drop(self.data.take());
         remove_file(path)?;
         Ok(())
     }
 
     /// Copies self into path, and returns a new vector at this path.
-    pub fn copy_to(&self, path: PathBuf) -> Result<Self, MmVecError> {
+    ///
+    /// ## Safety
+    /// Unsafe since we can't guarantee that the mmapped file has not been tampered with.
+    pub unsafe fn copy_to(&self, path: PathBuf) -> Result<Self, MmVecError> {
         self.flush()?;
         copy(&self.path, &path)?;
 
         let copied = open_file(&path)?;
-        // SAFETY: we just created this file from a valid vector
-        let copied_data = unsafe { Data::from_file_unchecked(copied)? };
+        let copied_data = Data::from_file_unchecked(copied)?;
         Ok(Self::new(copied_data, path))
     }
 
     /// Moves self into path, and returns a new vector at this path.
-    pub fn move_to(self, path: PathBuf) -> Result<Self, MmVecError> {
+    ///
+    /// ## Safety
+    /// We can't guarantee that the mmapped file has not been tampered with.
+    pub unsafe fn move_to(self, path: PathBuf) -> Result<Self, MmVecError> {
         self.flush()?;
         rename(&self.path, &path)?;
         drop(self);
 
         let moved = open_file(&path)?;
-        // SAFETY: we just created this file from a valid vector
-        let moved_data = unsafe { Data::from_file_unchecked(moved)? };
+        let moved_data = Data::from_file_unchecked(moved)?;
         Ok(Self::new(moved_data, path))
     }
 
-    /// Input sequence should be sorted to ensure best performance, but it is not required.
-    pub fn insert_sorted<O, F>(&mut self, items: &[T], sort_key: F) -> Result<(), MmVecError>
+    /// Insert items into vector, preserving sorted order.
+    /// If the vector was not previously sorted, it will be.
+    ///
+    /// Input sequence can be sorted to ensure better performance, but it is not required.
+    ///
+    /// ## Safety
+    /// We can't guarantee that the mmapped file has not been tampered with.
+    pub unsafe fn insert_sorted<O, F>(&mut self, items: &[T], sort_key: F) -> Result<(), MmVecError>
     where
         F: Fn(&T) -> O,
         O: Ord,
@@ -162,28 +192,29 @@ where
         self.flush()?;
         let current_len = self.len();
         self.resize(current_len + items.len())?;
-        unsafe {
-            self.as_slice_mut()[current_len..].copy_from_slice(items);
-            self.as_slice_mut().sort_unstable_by_key(sort_key);
-        }
+        self.as_slice_mut()[current_len..].copy_from_slice(items);
+        self.as_slice_mut().sort_unstable_by_key(sort_key);
         Ok(())
     }
 
-    pub fn remove_matching<O, F, S>(&mut self, predicate: F, sort_key: S) -> Result<(), MmVecError>
+    /// Remove all items matching the predicate, while preserving the sorted order.
+    /// If the vector was not previously sorted, it will be.
+    ///
+    /// ## Safety
+    /// We can't guarantee that the mmapped file has not been tampered with.
+    pub unsafe fn remove_matching<O, F, S>(&mut self, predicate: F, sort_key: S) -> Result<(), MmVecError>
     where
         F: Fn(&T) -> bool,
         S: Fn(&T) -> O,
         O: Ord,
     {
-        unsafe {
-            let split = partition(self.as_slice_mut(), |el| !predicate(el));
-            self.resize(split)?;
-            self.as_slice_mut().sort_unstable_by_key(sort_key);
-        }
+        let split = partition(self.as_slice_mut(), |el| !predicate(el));
+        self.resize(split)?;
+        self.as_slice_mut().sort_unstable_by_key(sort_key);
         Ok(())
     }
 
-    fn resize(&mut self, new_len: usize) -> Result<(), MmVecError> {
+    unsafe fn resize(&mut self, new_len: usize) -> Result<(), MmVecError> {
         self.flush()?;
 
         // On Windows it is required that file is not mapped before resizing.
@@ -192,14 +223,12 @@ where
         {
             drop(self.data.take());
 
-            unsafe {
-                let file = open_file(self.path())?;
-                self.data = Some(Data::from_file_unchecked_resized(file, new_len)?);
-            }
+            let file = open_file(self.path())?;
+            self.data = Some(Data::from_file_unchecked_resized(file, new_len)?);
         }
 
         #[cfg(not(windows))]
-        self.data.as_mut().map_or(Ok(()), |d| unsafe { d.resize(new_len) })?;
+        self.data.as_mut().map_or(Ok(()), |d| d.resize(new_len))?;
 
         Ok(())
     }
@@ -231,12 +260,20 @@ where
         unsafe { start.add(offset) }
     }
 
+    fn header_offset_mut(&mut self, offset: usize) -> *mut u8 {
+        let start = self.header_mmap.as_mut_ptr() as *mut u8;
+        assert!(offset < Self::HEADER_SIZE as usize, "offset is out of bounds");
+        assert!(offset % 8 == 0, "offset is not placed on u64 boundary");
+        // SAFETY: we checked prerequisites for `add`
+        unsafe { start.add(offset) }
+    }
+
     pub unsafe fn sig(&self) -> u64 {
         *(self.header_offset(0) as *const u64)
     }
 
     unsafe fn set_sig(&mut self, sig: u64) {
-        *(self.header_offset(0) as *mut u64) = sig;
+        *(self.header_offset_mut(0) as *mut u64) = sig;
     }
 
     pub unsafe fn len(&self) -> u64 {
@@ -244,7 +281,7 @@ where
     }
 
     unsafe fn set_len(&mut self, len: u64) {
-        *(self.header_offset(8) as *mut u64) = len;
+        *(self.header_offset_mut(8) as *mut u64) = len;
     }
 
     pub fn capacity(&self) -> usize {
@@ -361,98 +398,126 @@ unsafe fn mmap(file: &File, offset: u64, len: usize) -> io::Result<MmapMut> {
 mod tests {
     use super::*;
 
+    fn with_file_path(f: impl FnOnce(&Path)) {
+        let tmp = tempfile::tempdir().expect("failed to create tmp dir");
+        let test_path = tmp.path().join("test.bin");
+        f(&test_path)
+    }
+
+    fn get_file_len(path: &Path) -> u64 {
+        let file3 = open_file(&path).expect("failed to open file");
+        file3.metadata().expect("failed to read metadata").len()
+    }
+
     #[test]
-    fn test_data_header_fields() {
-        let tmp = tempfile::tempdir().unwrap();
-        let test_path = tmp.path().join("test.mmvec");
-        let file = create_new_file(&test_path).unwrap();
+    fn data_header_fields_are_correctly_initialized() {
+        with_file_path(|test_path| {
+            let file = create_new_file(&test_path).expect("failed to create file");
+            unsafe {
+                let data = Data::<u64>::new_uninit(file, 42, 100).expect("failed to create data");
+                assert_eq!(data.sig(), 42, "sig");
+                assert_eq!(data.len(), 100, "len");
+            }
+        })
+    }
 
-        unsafe {
-            let mut data = Data::<u64>::new_uninit(file, 42, 100).expect("failed to create data");
-            assert_eq!(data.sig(), 42, "sig should be 42!");
-            assert_eq!(data.len(), 100, "len should be 100!");
-            data.set_sig(129);
-            assert_eq!(data.sig(), 129, "data sig cannot be set correctly!");
+    #[test]
+    fn data_header_fields_can_be_set() {
+        with_file_path(|test_path| {
+            let file = create_new_file(&test_path).expect("failed to create file");
+            unsafe {
+                let mut data = Data::<u64>::new_uninit(file, 42, 100).expect("failed to create data");
+                data.set_sig(420);
+                data.set_len(1000);
+                assert_eq!(data.sig(), 420, "sig");
+                assert_eq!(data.len(), 1000, "len");
+            }
+        })
+    }
 
-            drop(data);
+    #[test]
+    fn data_header_fields_can_be_read_after_data_is_recreated() {
+        with_file_path(|test_path| {
+            let file = create_new_file(&test_path).expect("failed to create file");
+            unsafe {
+                let mut data = Data::<u64>::new_uninit(file, 42, 100).expect("failed to create data");
+                data.set_sig(420);
+                data.set_len(1000);
+            }
 
             let file = open_file(&test_path).unwrap();
-            let data = Data::<u64>::from_file_unchecked(file).expect("failed to create data");
-            assert_eq!(data.sig(), 129, "sig is not preserved!");
-            assert_eq!(data.len(), 100, "len is not preserved!");
-        }
+            unsafe {
+                let data = Data::<u64>::from_file_unchecked(file).expect("failed to create data");
+                assert_eq!(data.sig(), 420, "sig");
+                assert_eq!(data.len(), 1000, "len");
+            }
+        })
     }
 
     #[cfg(not(windows))]
     #[test]
-    fn test_data_resize_extend() {
-        let tmp = tempfile::tempdir().unwrap();
-        let test_path = tmp.path().join("test.mmvec");
-        let file = create_new_file(&test_path).unwrap();
-        unsafe {
-            let mut data = Data::<u64>::new_uninit(file, 42, 100).unwrap();
-            assert_eq!(data.len(), 100, "init len should be 100");
-            data.resize(1000).unwrap();
-            assert_eq!(data.len(), 1000, "updated len should be 1000");
+    fn data_can_be_correctly_resized_grow() {
+        with_file_path(|path| {
+            let file = create_new_file(path).expect("failed to create file");
+            unsafe {
+                let mut data = Data::<u64>::new_uninit(file, 42, 100).expect("failed to create data");
+                data.resize(1000).expect("failed to resize data");
+                assert_eq!(data.len(), 1000, "updated len");
+                assert_eq!(
+                    data.data_mmap.len(),
+                    1000 * size_of::<u64>(),
+                    "mmap size should be able to fit resized data"
+                );
+                assert_eq!(
+                    get_file_len(path),
+                    Data::<u64>::HEADER_SIZE + 1000 * size_of::<u64>() as u64,
+                    "file should be able to fit resized data"
+                );
+            }
             assert_eq!(
-                data.data_mmap.len(),
-                1000 * std::mem::size_of::<u64>(),
-                "mmap size should correspond to the resized data"
+                get_file_len(path),
+                Data::<u64>::HEADER_SIZE + 1000 * size_of::<u64>() as u64,
+                "file should preserve resized length after data is destroyed"
             );
-            let file2 = open_file(&test_path).unwrap();
-            assert_eq!(
-                file2.metadata().unwrap().len(),
-                Data::<u64>::HEADER_SIZE + 1000 * std::mem::size_of::<u64>() as u64,
-                "file should have corresponding length"
-            );
-        }
-        let file3 = open_file(&test_path).unwrap();
-        assert_eq!(
-            file3.metadata().unwrap().len(),
-            Data::<u64>::HEADER_SIZE + 1000 * std::mem::size_of::<u64>() as u64,
-            "file should have corresponding length after data is closed"
-        );
+        })
     }
 
     #[cfg(not(windows))]
     #[test]
-    fn test_data_resize_shrink() {
-        let tmp = tempfile::tempdir().unwrap();
-        let test_path = tmp.path().join("test.mmvec");
-        let file = create_new_file(&test_path).unwrap();
-        unsafe {
-            let mut data = Data::<u64>::new_uninit(file, 42, 100).unwrap();
-            assert_eq!(data.len(), 100, "init len should be 100");
-            data.resize(10).unwrap();
-            assert_eq!(data.len(), 10, "updated len should be 10");
+    fn data_can_be_correctly_resized_shrink() {
+        with_file_path(|path| {
+            let file = create_new_file(path).expect("failed to create file");
+            unsafe {
+                let mut data = Data::<u64>::new_uninit(file, 42, 100).expect("failed to create data");
+                data.resize(10).expect("failed to resize data");
+                assert_eq!(data.len(), 10, "updated len");
+                assert_eq!(
+                    data.data_mmap.len(),
+                    10 * size_of::<u64>(),
+                    "mmap size should be able to fit resized data"
+                );
+                assert_eq!(
+                    get_file_len(path),
+                    Data::<u64>::HEADER_SIZE + 10 * size_of::<u64>() as u64,
+                    "file should be able to fit resized data"
+                );
+            }
             assert_eq!(
-                data.data_mmap.len(),
-                10 * std::mem::size_of::<u64>(),
-                "mmap size should correspond to the resized data"
+                get_file_len(path),
+                Data::<u64>::HEADER_SIZE + 10 * size_of::<u64>() as u64,
+                "file should preserve resized length after data is destroyed"
             );
-            let file2 = open_file(&test_path).unwrap();
-            assert_eq!(
-                file2.metadata().unwrap().len(),
-                Data::<u64>::HEADER_SIZE + 10 * std::mem::size_of::<u64>() as u64,
-                "file should have corresponding length"
-            );
-        }
-        let file3 = open_file(&test_path).unwrap();
-        assert_eq!(
-            file3.metadata().unwrap().len(),
-            Data::<u64>::HEADER_SIZE + 10 * std::mem::size_of::<u64>() as u64,
-            "file should have corresponding length after data is closed"
-        );
+        })
     }
 
     #[test]
-    fn test_from_vec_to_vec() {
-        let tmp = tempfile::tempdir().unwrap();
-        let test_path = tmp.path().join("test.mmvec");
-        let data = vec![(199, 200), (200, 532), (449, 400)];
-        let vec = MmVec::from_vec(0, data.clone(), test_path.clone()).expect("failed to create memvec");
-        drop(vec);
-        let result = MmVec::<(i32, i32)>::from_path(0, test_path).expect("failed to load memvec from file");
-        assert_eq!(unsafe { result.as_slice() }, data.as_slice(), "data was corrupted");
+    fn mmvec_can_be_dumped_to_file_then_read() {
+        with_file_path(|path| unsafe {
+            let data = vec![199, 200, 200, 532, 449, 400];
+            let vec = MmVec::from_slice(0, &data, path.to_path_buf()).expect("failed to create memvec");
+            drop(vec);
+            let result = MmVec::<i32>::from_path(0, path.to_path_buf()).expect("failed to load memvec from file");
+            assert_eq!(result.as_slice(), data.as_slice());
+        })
     }
 }
