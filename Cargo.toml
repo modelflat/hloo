@@ -11,6 +11,7 @@ bit_permute = { path = "bit_permute" }
 bit_permute_macro = { path = "bit_permute_macro" }
 thiserror = "1"
 memmap2 = { version = "0.7" }
+fs4 = { version = "0.6", features = ["sync"] }
 tempfile = { version = "3" }
 
 [dev-dependencies]

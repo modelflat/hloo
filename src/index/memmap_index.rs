@@ -38,7 +38,7 @@ where
     }
 
     pub fn new(permuter: P, sig: u64, path: PathBuf) -> Result<Self, MmVecError> {
-        let data = unsafe { MmVec::new_empty(sig, path)? };
+        let data = MmVec::new_empty(sig, path)?;
         Ok(Self::new_with_data(permuter, data))
     }
 
@@ -105,8 +105,7 @@ where
     type Error = MmVecError;
 
     fn create(permuter: P, sig: u64, path: &Path) -> Result<Self, Self::Error> {
-        // SAFETY: ???
-        let data = unsafe { MmVec::new_empty(sig, path.to_path_buf())? };
+        let data = MmVec::new_empty(sig, path.to_path_buf())?;
         Ok(Self::new_with_data(permuter, data))
     }
 
