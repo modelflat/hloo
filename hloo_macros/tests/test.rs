@@ -1,7 +1,7 @@
 use rand::random;
 
-use bit_permute::{BitIndex, BitPermuter, Distance, DynBitPermuter};
-use bit_permute_macro::make_permutations;
+use hloo_core::{BitIndex, BitPermuter, Distance};
+use hloo_macros::make_permutations;
 
 #[test]
 fn apply_works_correctly() {

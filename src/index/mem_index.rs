@@ -1,24 +1,25 @@
 use std::{collections::BTreeSet, marker::PhantomData};
 
-use bit_permute::Distance;
+use hloo_core::Distance;
 
-use super::{block_locator::BlockLocator, extract_key, BitPermuter, Index, IndexStats};
+use crate::DynBitPermuter;
 
-pub struct MemIndex<K, V, M, P> {
-    permuter: P,
+use super::{block_locator::BlockLocator, extract_key, Index, IndexStats};
+
+pub struct MemIndex<K, V, M> {
+    permuter: DynBitPermuter<K, M>,
     block_locator: BlockLocator,
     current_stats: IndexStats,
     data: Vec<(K, V)>,
     _dummy: PhantomData<M>,
 }
 
-impl<K, V, M, P> MemIndex<K, V, M, P>
+impl<K, V, M> MemIndex<K, V, M>
 where
     K: Copy,
     M: Copy + Ord,
-    P: BitPermuter<K, M>,
 {
-    pub fn new(permuter: P) -> Self {
+    pub fn new(permuter: DynBitPermuter<K, M>) -> Self {
         Self {
             permuter,
             block_locator: BlockLocator::DoubleBsearch,
@@ -29,12 +30,11 @@ where
     }
 }
 
-impl<K, V, M, P> Index<K, V, M, P> for MemIndex<K, V, M, P>
+impl<K, V, M> Index<K, V, M> for MemIndex<K, V, M>
 where
     K: Copy + Distance + Ord,
     V: Copy,
     M: Copy + Ord,
-    P: BitPermuter<K, M>,
 {
     type Error = ();
 
@@ -42,8 +42,8 @@ where
         &self.data
     }
 
-    fn permuter(&self) -> &P {
-        &self.permuter
+    fn permuter(&self) -> DynBitPermuter<K, M> {
+        self.permuter.clone()
     }
 
     fn block_locator(&self) -> BlockLocator {
@@ -74,8 +74,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use bit_permute::{BitIndex, BitPermuter, Distance, DynBitPermuter};
-    use bit_permute_macro::make_permutations;
+    use hloo_core::{BitIndex, BitPermuter, Distance};
+    use hloo_macros::make_permutations;
 
     use super::*;
 

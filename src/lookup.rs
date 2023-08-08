@@ -1,8 +1,11 @@
 use std::{collections::HashSet, hash::Hash, marker::PhantomData, path::Path};
 
-use bit_permute::{BitPermuter, Distance};
+use hloo_core::Distance;
 
-use crate::index::{Index, PersistentIndex, SearchResultItem};
+use crate::{
+    index::{Index, PersistentIndex, SearchResultItem},
+    DynBitPermuter,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -26,12 +29,12 @@ impl<V> SearchResult<V> {
     }
 }
 
-pub struct Lookup<K, V, M, P, I> {
+pub struct Lookup<K, V, M, I> {
     indexes: Vec<I>,
-    _dummy: PhantomData<(K, V, M, P)>,
+    _dummy: PhantomData<(K, V, M)>,
 }
 
-impl<K, V, M, P, I> Lookup<K, V, M, P, I> {
+impl<K, V, M, I> Lookup<K, V, M, I> {
     pub fn new(indexes: Vec<I>) -> Self {
         Self {
             indexes,
@@ -44,13 +47,12 @@ impl<K, V, M, P, I> Lookup<K, V, M, P, I> {
     }
 }
 
-impl<K, V, M, P, I> Lookup<K, V, M, P, I>
+impl<K, V, M, I> Lookup<K, V, M, I>
 where
     K: Distance + Ord,
     V: Clone,
     M: Ord,
-    P: BitPermuter<K, M>,
-    I: Index<K, V, M, P>,
+    I: Index<K, V, M>,
 {
     pub fn max_search_distance(&self) -> u32 {
         self.indexes[0].permuter().n_blocks() - 1
@@ -107,11 +109,11 @@ where
     }
 }
 
-impl<K, V, M, P, I> Lookup<K, V, M, P, I>
+impl<K, V, M, I> Lookup<K, V, M, I>
 where
-    I: PersistentIndex<P>,
+    I: PersistentIndex<K, M>,
 {
-    pub fn create(permuters: Vec<P>, sig: u64, path: &Path) -> Result<Self, I::Error> {
+    pub fn create(permuters: Vec<DynBitPermuter<K, M>>, sig: u64, path: &Path) -> Result<Self, I::Error> {
         let mut indexes = Vec::new();
         for (i, p) in permuters.into_iter().enumerate() {
             let index_path = path.join(format!("index_{:04}_{:016x}.dat", i, sig));
@@ -120,7 +122,7 @@ where
         Ok(Self::new(indexes))
     }
 
-    pub fn load(permuters: Vec<P>, sig: u64, path: &Path) -> Result<Self, I::Error> {
+    pub fn load(permuters: Vec<DynBitPermuter<K, M>>, sig: u64, path: &Path) -> Result<Self, I::Error> {
         let mut indexes = Vec::new();
         for (i, p) in permuters.into_iter().enumerate() {
             let index_path = path.join(format!("index_{:04}_{:016x}.dat", i, sig));

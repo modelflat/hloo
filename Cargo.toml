@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = ["bit_permute", "bit_permute_macro", "data_gen"]
+members = ["hloo_core", "hloo_macros", "data_gen"]
 
 [dependencies]
-bit_permute = { path = "bit_permute" }
-bit_permute_macro = { path = "bit_permute_macro" }
+hloo_core = { path = "hloo_core" }
+hloo_macros = { path = "hloo_macros" }
 thiserror = "1"
 memmap2 = { version = "0.7" }
 fs4 = { version = "0.6", features = ["sync"] }

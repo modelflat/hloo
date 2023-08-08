@@ -1,4 +1,4 @@
-use bit_permute::create_permutations;
+use hloo_core::create_permutations;
 use itertools::Itertools;
 
 fn main() {

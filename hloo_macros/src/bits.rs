@@ -159,7 +159,7 @@ impl ToTokens for Bits<'_> {
                 }
             }
 
-            impl BitIndex<usize> for #type_name {
+            impl BitIndex for #type_name {
                 fn index(&self, idx: usize) -> bool {
                     self.get(idx)
                 }

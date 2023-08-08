@@ -4,7 +4,7 @@ use quote::quote;
 use crate::bit_op::BitOp;
 
 pub struct Permutation<'a> {
-    pub perm: bit_permute::Permutation,
+    pub perm: hloo_core::Permutation,
     pub struct_name: Ident,
     data_type_name: &'a Ident,
     mask_type_name: &'a Ident,
@@ -14,7 +14,7 @@ pub struct Permutation<'a> {
 
 impl<'a> Permutation<'a> {
     pub fn new(
-        perm: bit_permute::Permutation,
+        perm: hloo_core::Permutation,
         struct_name: Ident,
         data_type_name: &'a Ident,
         mask_type_name: &'a Ident,
@@ -68,31 +68,36 @@ impl ToTokens for Permutation<'_> {
             #[derive(Clone, Copy)]
             pub struct #struct_name;
 
-            impl BitPermuter<#data_type_name, #mask_type_name> for #struct_name {
-                fn apply(&self, w: &#data_type_name) -> #data_type_name {
+            impl #struct_name {
+                fn mask_bits(&self) -> u32 {
+                    #mask_bits as u32
+                }
+            }
+
+            impl hloo_core::BitPermuter for #struct_name {
+                type Bits = #data_type_name;
+                type Mask = #mask_type_name;
+
+                fn apply(&self, w: &Self::Bits) -> Self::Bits {
                     let mut nw: #data_type_name = Default::default();
                     #(#apply_ops);*;
                     nw
                 }
 
-                fn revert(&self, w: &#data_type_name) -> #data_type_name {
-                    let mut nw: #data_type_name = Default::default();
+                fn revert(&self, w: &Self::Bits) -> Self::Bits {
+                    let mut nw: Self::Bits = Default::default();
                     #(#revert_ops);*;
                     nw
                 }
 
-                fn mask(&self, w: &#data_type_name) -> #mask_type_name {
-                    let mut nw: #mask_type_name = Default::default();
+                fn mask(&self, w: &Self::Bits) -> Self::Mask {
+                    let mut nw: Self::Mask = Default::default();
                     #(#mask_ops);*;
                     nw
                 }
 
                 fn n_blocks(&self) -> u32 {
                     #n_blocks as u32
-                }
-
-                fn mask_bits(&self) -> u32 {
-                    #mask_bits as u32
                 }
             }
         };

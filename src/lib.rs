@@ -16,17 +16,23 @@ pub mod util;
 
 pub mod mmvec;
 
-pub use bit_permute;
-pub use bit_permute_macro::make_permutations;
+use std::sync::Arc;
+
+pub use hloo_core;
+pub use hloo_macros::make_permutations;
 
 pub use index::Index;
 pub use lookup::Lookup;
+
+pub type DynIndex<K, V, M, E> = Arc<dyn Index<K, V, M, Error = E>>;
+
+pub type DynBitPermuter<B, M> = Arc<dyn hloo_core::BitPermuter<Bits = B, Mask = M>>;
 
 /// This macro serves as an initialization step to create lookups with specified configuration.
 #[macro_export]
 macro_rules! init_lookup {
     ($name:ident,$f:literal,$r:literal,$k:literal,$w:literal) => {
-        use hloo::bit_permute::{BitIndex, BitPermuter, Distance, DynBitPermuter};
+        use hloo::hloo_core::{BitIndex, BitPermuter, Distance};
         hloo::make_permutations!(struct_name = "Permutations", f = $f, r = $r, k = $k, w = $w);
 
         #[doc = "This struct can create or load lookups with the following underlying "]
@@ -40,13 +46,13 @@ macro_rules! init_lookup {
         #[doc = stringify!($w)]
         pub struct $name;
 
-        pub type Permuter = DynBitPermuter<Bits, Mask>;
+        pub type Permuter = hloo::DynBitPermuter<Bits, Mask>;
 
-        pub type MemIndex<T> = hloo::index::MemIndex<Bits, T, Mask, Permuter>;
-        pub type MemLookup<T> = hloo::Lookup<Bits, T, Mask, Permuter, MemIndex<T>>;
+        pub type MemIndex<T> = hloo::index::MemIndex<Bits, T, Mask>;
+        pub type MemLookup<T> = hloo::Lookup<Bits, T, Mask, MemIndex<T>>;
 
-        pub type MemMapIndex<T> = hloo::index::MemMapIndex<Bits, T, Mask, Permuter>;
-        pub type MemMapLookup<T> = hloo::Lookup<Bits, T, Mask, Permuter, MemMapIndex<T>>;
+        pub type MemMapIndex<T> = hloo::index::MemMapIndex<Bits, T, Mask>;
+        pub type MemMapLookup<T> = hloo::Lookup<Bits, T, Mask, MemMapIndex<T>>;
 
         impl $name {
             pub fn signature(type_sig: u64) -> u64 {

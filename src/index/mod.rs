@@ -12,7 +12,9 @@ pub use memmap_index::{MemMapIndex, MemMapIndexError};
 
 use std::{hash::Hash, path::Path};
 
-use bit_permute::{BitPermuter, Distance};
+use hloo_core::Distance;
+
+use crate::DynBitPermuter;
 
 /// Represents a single block of potential candidates for a distance search.
 pub struct Candidates<'a, K, V> {
@@ -95,17 +97,16 @@ where
 
 /// Search index. Equivalent to notion of "table" in
 /// [the paper](https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/33026.pdf)
-pub trait Index<K, V, M, P>
+pub trait Index<K, V, M>
 where
     K: Distance,
     M: Ord,
     V: Clone,
-    P: BitPermuter<K, M>,
 {
     type Error;
 
     /// Get permuter reference.
-    fn permuter(&self) -> &P;
+    fn permuter(&self) -> DynBitPermuter<K, M>;
 
     /// Get currently used BlockLocator.
     fn block_locator(&self) -> BlockLocator;
@@ -144,15 +145,15 @@ where
 }
 
 /// Index that can be persisted to disk or some other storage.
-pub trait PersistentIndex<P>
+pub trait PersistentIndex<K, M>
 where
     Self: Sized,
 {
     type Error;
 
-    fn create(permuter: P, sig: u64, path: &Path) -> Result<Self, Self::Error>;
+    fn create(permuter: DynBitPermuter<K, M>, sig: u64, path: &Path) -> Result<Self, Self::Error>;
 
-    fn load(permuter: P, sig: u64, path: &Path) -> Result<Self, Self::Error>;
+    fn load(permuter: DynBitPermuter<K, M>, sig: u64, path: &Path) -> Result<Self, Self::Error>;
 
     fn persist(&self) -> Result<(), Self::Error>;
 }

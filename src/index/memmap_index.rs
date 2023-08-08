@@ -4,30 +4,33 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use bit_permute::Distance;
+use hloo_core::Distance;
 
-use crate::mmvec::{MmVec, MmVecError};
+use crate::{
+    mmvec::{MmVec, MmVecError},
+    DynBitPermuter,
+};
 
-use super::{block_locator::BlockLocator, extract_key, BitPermuter, Index, IndexStats, PersistentIndex};
+use super::{block_locator::BlockLocator, extract_key, Index, IndexStats, PersistentIndex};
 
 pub type MemMapIndexError = MmVecError;
 
-pub struct MemMapIndex<K, V, M, P>
+pub struct MemMapIndex<K, V, M>
 where
     (K, V): Copy,
 {
-    permuter: P,
+    permuter: DynBitPermuter<K, M>,
     block_locator: BlockLocator,
     current_stats: IndexStats,
     data: MmVec<(K, V)>,
     _dummy: PhantomData<M>,
 }
 
-impl<K, V, M, P> MemMapIndex<K, V, M, P>
+impl<K, V, M> MemMapIndex<K, V, M>
 where
     (K, V): Copy,
 {
-    pub(crate) fn new_with_data(permuter: P, data: MmVec<(K, V)>) -> Self {
+    pub(crate) fn new_with_data(permuter: DynBitPermuter<K, M>, data: MmVec<(K, V)>) -> Self {
         Self {
             permuter,
             block_locator: BlockLocator::DoubleBsearch,
@@ -37,7 +40,7 @@ where
         }
     }
 
-    pub fn new(permuter: P, sig: u64, path: PathBuf) -> Result<Self, MmVecError> {
+    pub fn new(permuter: DynBitPermuter<K, M>, sig: u64, path: PathBuf) -> Result<Self, MmVecError> {
         let data = MmVec::new_empty(sig, path)?;
         Ok(Self::new_with_data(permuter, data))
     }
@@ -48,17 +51,16 @@ where
     }
 }
 
-impl<K, V, M, P> Index<K, V, M, P> for MemMapIndex<K, V, M, P>
+impl<K, V, M> Index<K, V, M> for MemMapIndex<K, V, M>
 where
     K: Copy + Distance + Ord,
     V: Copy,
     M: Copy + Ord,
-    P: BitPermuter<K, M>,
 {
     type Error = MmVecError;
 
-    fn permuter(&self) -> &P {
-        &self.permuter
+    fn permuter(&self) -> DynBitPermuter<K, M> {
+        self.permuter.clone()
     }
 
     fn block_locator(&self) -> BlockLocator {
@@ -98,18 +100,18 @@ where
     }
 }
 
-impl<K, V, M, P> PersistentIndex<P> for MemMapIndex<K, V, M, P>
+impl<K, V, M> PersistentIndex<K, M> for MemMapIndex<K, V, M>
 where
     (K, V): Copy,
 {
     type Error = MmVecError;
 
-    fn create(permuter: P, sig: u64, path: &Path) -> Result<Self, Self::Error> {
+    fn create(permuter: DynBitPermuter<K, M>, sig: u64, path: &Path) -> Result<Self, Self::Error> {
         let data = MmVec::new_empty(sig, path.to_path_buf())?;
         Ok(Self::new_with_data(permuter, data))
     }
 
-    fn load(permuter: P, sig: u64, path: &Path) -> Result<Self, Self::Error> {
+    fn load(permuter: DynBitPermuter<K, M>, sig: u64, path: &Path) -> Result<Self, Self::Error> {
         // SAFETY: ???
         let data = unsafe { MmVec::from_path(sig, path.to_path_buf())? };
         Ok(Self::new_with_data(permuter, data))
@@ -123,8 +125,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use bit_permute::{BitIndex, BitPermuter, Distance, DynBitPermuter};
-    use bit_permute_macro::make_permutations;
+    use hloo_core::{BitIndex, BitPermuter, Distance};
+    use hloo_macros::make_permutations;
 
     use super::*;
 

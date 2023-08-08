@@ -1,8 +1,8 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::random;
 
-use bit_permute::{BitIndex, BitPermuter, Distance, DynBitPermuter};
-use bit_permute_macro::make_permutations;
+use hloo_core::{BitIndex, BitPermuter, Distance};
+use hloo_macros::make_permutations;
 
 make_permutations!(struct_name = "Permutations", f = 256, r = 5, k = 2, w = 64);
 

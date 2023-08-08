@@ -2,12 +2,12 @@ use darling::export::syn::Ident;
 use quote::{quote, ToTokens};
 
 pub struct BitOp<'a> {
-    pub op: bit_permute::BitOp,
+    pub op: hloo_core::BitOp,
     word_type_name: &'a Ident,
 }
 
 impl<'a> BitOp<'a> {
-    pub fn new(op: bit_permute::BitOp, word_type_name: &'a Ident) -> Self {
+    pub fn new(op: hloo_core::BitOp, word_type_name: &'a Ident) -> Self {
         Self { op, word_type_name }
     }
 }
@@ -16,7 +16,7 @@ impl ToTokens for BitOp<'_> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let word_type_name = self.word_type_name;
         let op_tokens = match self.op {
-            bit_permute::BitOp::MaskShiftAndCopy {
+            hloo_core::BitOp::MaskShiftAndCopy {
                 src_word,
                 src_mask,
                 src_shift,
@@ -33,14 +33,14 @@ impl ToTokens for BitOp<'_> {
                     }
                 }
             }
-            bit_permute::BitOp::MaskAndCopy {
+            hloo_core::BitOp::MaskAndCopy {
                 src_word,
                 src_mask,
                 dst_word,
             } => quote! {
                 nw.data[#dst_word] |= w.data[#src_word] & (#src_mask as #word_type_name)
             },
-            bit_permute::BitOp::Copy { src_word, dst_word } => quote! {
+            hloo_core::BitOp::Copy { src_word, dst_word } => quote! {
                 nw.data[#dst_word] = w.data[#src_word]
             },
         };
