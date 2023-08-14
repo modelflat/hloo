@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, marker::PhantomData};
 
-use hloo_core::Distance;
+use hloo_core::{BitPermuter, Distance};
 
 use crate::DynBitPermuter;
 
@@ -42,8 +42,8 @@ where
         &self.data
     }
 
-    fn permuter(&self) -> DynBitPermuter<K, M> {
-        self.permuter.clone()
+    fn permuter(&self) -> &dyn BitPermuter<Bits = K, Mask = M> {
+        self.permuter.as_ref()
     }
 
     fn block_locator(&self) -> BlockLocator {

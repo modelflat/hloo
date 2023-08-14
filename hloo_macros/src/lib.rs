@@ -4,11 +4,11 @@ mod permutation;
 
 extern crate proc_macro;
 
-use hloo_core::create_permutations;
 use darling::{
     export::{syn::Ident, NestedMeta},
     Error, FromMeta,
 };
+use hloo_core::create_permutations;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 
@@ -87,15 +87,15 @@ pub fn make_permutations(item: TokenStream) -> TokenStream {
 
         impl #struct_name {
             #[inline(always)]
-            pub fn get_variant(variant: usize) -> std::sync::Arc<dyn BitPermuter<Bits = #data_type_name, Mask = #mask_type_name>> {
+            pub fn get_variant(variant: usize) -> Box<dyn BitPermuter<Bits = #data_type_name, Mask = #mask_type_name>> {
                 match variant {
-                    #( #variants_range => std::sync::Arc::new(#variants {}) as std::sync::Arc<dyn BitPermuter<Bits = #data_type_name, Mask = #mask_type_name>> ),*,
+                    #( #variants_range => Box::new(#variants {}) as Box<dyn BitPermuter<Bits = #data_type_name, Mask = #mask_type_name>> ),*,
                     i => panic!("permutation variant out of range: {}", i),
                 }
             }
 
             #[inline(always)]
-            pub fn get_all_variants() -> Vec<std::sync::Arc<dyn BitPermuter<Bits = #data_type_name, Mask = #mask_type_name>>> {
+            pub fn get_all_variants() -> Vec<Box<dyn BitPermuter<Bits = #data_type_name, Mask = #mask_type_name>>> {
                 vec![
                     #( Self::get_variant(#all_variants_range) ),*
                 ]

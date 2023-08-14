@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use hloo_core::Distance;
+use hloo_core::{BitPermuter, Distance};
 
 use crate::{
     mmvec::{MmVec, MmVecError},
@@ -59,8 +59,8 @@ where
 {
     type Error = MmVecError;
 
-    fn permuter(&self) -> DynBitPermuter<K, M> {
-        self.permuter.clone()
+    fn permuter(&self) -> &dyn BitPermuter<Bits = K, Mask = M> {
+        self.permuter.as_ref()
     }
 
     fn block_locator(&self) -> BlockLocator {
@@ -155,29 +155,14 @@ mod tests {
     fn memmap_index_insert_works_correctly() {
         let tempdir = tempfile::tempdir().expect("failed to create temp dir");
         for (i, perm) in Permutations::get_all_variants().into_iter().enumerate() {
-            let index_path = tempdir.path().join("storage.bin");
-            let mut index = MemMapIndex::new(perm.clone(), 0, index_path.clone()).unwrap();
             let data_part_1 = vec![
                 (Bits::new([0b11111000100010_001000100010001000u32]), 0),
                 (Bits::new([0b11001000111110_001000100010001010u32]), 3),
                 (Bits::new([0b11111000100010_001000100011111000u32]), 2),
                 (Bits::new([0b10011110100010_001000100010001100u32]), 4),
             ];
-            index.insert(&data_part_1).unwrap();
-            assert_eq!(
-                index.data().len(),
-                data_part_1.len(),
-                "[{}] index length is wrong after first insert",
-                i
-            );
-            let mut expected: Vec<_> = data_part_1.iter().map(|(k, v)| (perm.apply(k), *v)).collect();
-            expected.sort_unstable_by_key(|(k, _)| *k);
-            assert_eq!(
-                index.data(),
-                expected,
-                "[{}] index contents is wrong after first insert",
-                i
-            );
+            let mut expected_first: Vec<_> = data_part_1.iter().map(|(k, v)| (perm.apply(k), *v)).collect();
+            expected_first.sort_unstable_by_key(|(k, _)| *k);
 
             let data_part_2 = vec![
                 (Bits::new([0b10001000101110_001000100010001000u32]), 1),
@@ -185,6 +170,25 @@ mod tests {
                 (Bits::new([0b11111010100010_001000100011111000u32]), 2),
                 (Bits::new([0b10010110101110_001000100010001100u32]), 9),
             ];
+            let mut expected_second = expected_first.clone();
+            expected_second.extend(data_part_2.iter().map(|(k, v)| (perm.apply(k), *v)));
+            expected_second.sort_unstable_by_key(|(k, _)| *k);
+
+            let index_path = tempdir.path().join("storage.bin");
+            let mut index = MemMapIndex::new(perm, 0, index_path.clone()).unwrap();
+            index.insert(&data_part_1).unwrap();
+            assert_eq!(
+                index.data().len(),
+                data_part_1.len(),
+                "[{}] index length is wrong after first insert",
+                i
+            );
+            assert_eq!(
+                index.data(),
+                expected_first,
+                "[{}] index contents is wrong after first insert",
+                i
+            );
             index.insert(&data_part_2).unwrap();
             assert_eq!(
                 index.data().len(),
@@ -192,11 +196,9 @@ mod tests {
                 "[{}] index length is wrong after second insert",
                 i
             );
-            expected.extend(data_part_2.iter().map(|(k, v)| (perm.apply(k), *v)));
-            expected.sort_unstable_by_key(|(k, _)| *k);
             assert_eq!(
                 index.data(),
-                expected,
+                expected_second,
                 "[{}] index contents is wrong after second insert",
                 i
             );
@@ -207,27 +209,16 @@ mod tests {
     fn memmap_index_removal_works_correctly() {
         let tempdir = tempfile::tempdir().expect("failed to create temp dir");
         for (i, perm) in Permutations::get_all_variants().into_iter().enumerate() {
-            let index_path = tempdir.path().join("storage.bin");
-            let mut index = MemMapIndex::new(perm.clone(), 0, index_path.clone()).unwrap();
             let data = vec![
                 (Bits::new([0b11111000100010_001000100010001000u32]), 0),
                 (Bits::new([0b11001000111110_001000100010001010u32]), 3),
                 (Bits::new([0b11111000100010_001000100011111000u32]), 2),
                 (Bits::new([0b10011110100010_001000100010001100u32]), 4),
             ];
-            index.insert(&data).unwrap();
-
             let to_remove = vec![
                 Bits::new([0b11111000100010_001000100010001000u32]),
                 Bits::new([0b11001000111110_001000100010001010u32]),
             ];
-            index.remove(&to_remove).unwrap();
-            assert_eq!(
-                index.data().len(),
-                data.len() - to_remove.len(),
-                "[{}] index length is wrong after removal",
-                i
-            );
             let mut expected: Vec<_> = vec![
                 (Bits::new([0b11111000100010_001000100011111000u32]), 2),
                 (Bits::new([0b10011110100010_001000100010001100u32]), 4),
@@ -235,6 +226,13 @@ mod tests {
             .iter()
             .map(|(k, v)| (perm.apply(k), *v))
             .collect();
+
+            let index_path = tempdir.path().join("storage.bin");
+            let mut index = MemMapIndex::new(perm, 0, index_path.clone()).unwrap();
+
+            index.insert(&data).unwrap();
+            index.remove(&to_remove).unwrap();
+
             expected.sort_unstable_by_key(|(k, _)| *k);
             assert_eq!(
                 index.data(),

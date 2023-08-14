@@ -39,7 +39,7 @@ pub use lookup::{Lookup, SimpleLookup};
 
 pub type DynIndex<K, V, M, E> = Arc<dyn Index<K, V, M, Error = E>>;
 
-pub type DynBitPermuter<B, M> = Arc<dyn hloo_core::BitPermuter<Bits = B, Mask = M>>;
+pub type DynBitPermuter<B, M> = Box<dyn hloo_core::BitPermuter<Bits = B, Mask = M>>;
 
 /// This macro serves as an initialization step to create lookups with specified configuration.
 #[macro_export]
@@ -61,8 +61,6 @@ macro_rules! init_lookup {
         #[doc = ", w = "]
         #[doc = stringify!($w)]
         pub struct $name;
-
-        pub type Permuter = hloo::DynBitPermuter<Bits, Mask>;
 
         pub type MemIndex<T> = hloo::index::MemIndex<Bits, T, Mask>;
         pub type MemLookup<T> = hloo::SimpleLookup<Bits, T, Mask, MemIndex<T>>;

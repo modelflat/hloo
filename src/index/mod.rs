@@ -9,7 +9,7 @@ pub use memmap_index::{MemMapIndex, MemMapIndexError};
 
 use std::{hash::Hash, path::Path};
 
-use hloo_core::Distance;
+use hloo_core::{BitPermuter, Distance};
 
 use crate::DynBitPermuter;
 
@@ -123,7 +123,7 @@ where
     type Error;
 
     /// Get permuter reference.
-    fn permuter(&self) -> DynBitPermuter<K, M>;
+    fn permuter(&self) -> &dyn BitPermuter<Bits = K, Mask = M>;
 
     /// Get currently used BlockLocator.
     fn block_locator(&self) -> BlockLocator;
