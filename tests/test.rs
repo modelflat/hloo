@@ -48,7 +48,7 @@ fn mem_lookup_compiles_and_runs_without_errors() {
 #[test]
 fn memmap_lookup_compiles_and_runs_without_errors() {
     let tmp_path = tempfile::tempdir().unwrap();
-    let mut lookup = LookupUtil::create_memmap_lookup::<i64>(0, tmp_path.path()).unwrap();
+    let mut lookup = LookupUtil::create_memmap_lookup::<i64>(tmp_path.path()).unwrap();
     let data = generate_data(1);
     let target = data[0].0;
     lookup.insert(&data).expect("failed to insert into memmap index");
@@ -84,7 +84,7 @@ fn mem_lookup_works_correctly() {
 #[test]
 fn memmap_lookup_works_correctly() {
     let tmp_path = tempfile::tempdir().unwrap();
-    let mut lookup = LookupUtil::create_memmap_lookup::<i64>(0, tmp_path.path()).unwrap();
+    let mut lookup = LookupUtil::create_memmap_lookup::<i64>(tmp_path.path()).unwrap();
     let data = generate_data(10);
     let target = flip_bits(data[0].0, 3);
     lookup.insert(&data).unwrap();
@@ -127,7 +127,7 @@ fn naive_results_correspond_to_hloo() {
 
     let lookup_map = {
         let tmp_path = tempfile::tempdir().unwrap();
-        let mut lookup_map = LookupUtil::create_memmap_lookup::<i64>(0, tmp_path.path()).unwrap();
+        let mut lookup_map = LookupUtil::create_memmap_lookup::<i64>(tmp_path.path()).unwrap();
         lookup_map.insert(&data).unwrap();
         lookup_map
     };
@@ -167,7 +167,7 @@ fn memmap_lookup_can_be_saved_and_loaded() {
     let expected = naive_search(&data, target, 5).into_iter().collect::<HashSet<_>>();
 
     {
-        let mut lookup = LookupUtil::create_memmap_lookup::<i64>(0, tmp_path.path()).unwrap();
+        let mut lookup = LookupUtil::create_memmap_lookup::<i64>(tmp_path.path()).unwrap();
         lookup.insert(&data).unwrap();
         let result = lookup.search_simple(&target, 3);
         assert_eq!(
@@ -184,7 +184,7 @@ fn memmap_lookup_can_be_saved_and_loaded() {
     }
 
     {
-        let lookup = LookupUtil::load_memmap_lookup::<i64>(0, tmp_path.path()).unwrap();
+        let lookup = LookupUtil::load_memmap_lookup::<i64>(tmp_path.path()).unwrap();
         let result = lookup.search_simple(&target, 3);
         assert_eq!(
             result.len(),

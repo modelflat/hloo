@@ -1,4 +1,9 @@
-use std::cmp::Ordering;
+use std::{
+    any::TypeId,
+    cmp::Ordering,
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+};
 
 /// Partition a slice according to predicate.
 ///
@@ -51,6 +56,17 @@ where
         .binary_search_by(f)
         .map(|i| i + start)
         .map_err(|i| i + start)
+}
+
+pub fn sign_type<T: 'static>(f: u64, r: u64, k: u64, w: u64) -> u64 {
+    let t = TypeId::of::<T>();
+    let mut hasher = DefaultHasher::new();
+    t.hash(&mut hasher);
+    hasher.write_u64(f);
+    hasher.write_u64(r);
+    hasher.write_u64(k);
+    hasher.write_u64(w);
+    hasher.finish()
 }
 
 #[cfg(test)]

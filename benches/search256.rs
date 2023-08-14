@@ -41,7 +41,7 @@ fn search256_bench(c: &mut Criterion) {
 
         let temp_dir = tempfile::tempdir().unwrap();
         println!("inserting data into mem-mapped...");
-        let mut lookup2 = MemMapLookup::create(0, temp_dir.path()).unwrap();
+        let mut lookup2 = MemMapLookup::create(temp_dir.path()).unwrap();
         lookup2.insert(&data).unwrap();
         group.bench_function("hloo mem-mapped", |b| b.iter(|| lookup2.search(&target, 3)));
 

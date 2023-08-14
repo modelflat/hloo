@@ -27,6 +27,7 @@ macro_rules! impl_lookups {
             use crate::{
                 index::{MemIndex, MemMapIndex, PersistentIndex},
                 lookup::Lookup,
+                util::sign_type,
                 SimpleLookup,
             };
 
@@ -51,19 +52,28 @@ macro_rules! impl_lookups {
             impl_lookup!(MemMapLookup, MemMapIndex);
             impl<V> MemMapLookup<V>
             where
-                V: Copy,
+                V: Copy + 'static,
             {
                 pub fn create(
-                    sig: u64,
                     path: &std::path::Path,
                 ) -> Result<Self, <MemMapIndex<Bits, V, Mask> as PersistentIndex<Bits, Mask>>::Error> {
-                    let perms = Permutations::get_all_variants();
-                    Ok(Self(SimpleLookup::new(
-                        perms
-                            .into_iter()
-                            .map(|p| MemMapIndex::create(p, sig, path))
-                            .collect::<Result<_, _>>()?,
-                    )))
+                    let sig = sign_type::<V>($f, $r, $k, $w);
+                    Ok(Self(SimpleLookup::create(
+                        Permutations::get_all_variants(),
+                        sig,
+                        path,
+                    )?))
+                }
+
+                pub fn load(
+                    path: &std::path::Path,
+                ) -> Result<Self, <MemMapIndex<Bits, V, Mask> as PersistentIndex<Bits, Mask>>::Error> {
+                    let sig = sign_type::<V>($f, $r, $k, $w);
+                    Ok(Self(SimpleLookup::load(
+                        Permutations::get_all_variants(),
+                        sig,
+                        path,
+                    )?))
                 }
             }
         }

@@ -14,6 +14,13 @@
 //!
 //! ```
 //! use hloo::lookup::lookup_impl::{lookup64, lookup128, lookup192, lookup256};
+//!
+//! // in-memory
+//! let mem_lookup = lookup64::MemLookup::<i64>::new();
+//!
+//! // memory-mapped
+//! let path: std::path::PathBuf = "/tmp/some-path".try_into().unwrap();
+//! let memmap_lookup = lookup64::MemMapLookup::<i64>::create(&path);
 //! ```
 
 pub mod index;
@@ -63,36 +70,23 @@ macro_rules! init_lookup {
         pub type MemMapLookup<T> = hloo::SimpleLookup<Bits, T, Mask, MemMapIndex<T>>;
 
         impl $name {
-            pub fn signature(type_sig: u64) -> u64 {
-                use std::{collections::hash_map::DefaultHasher, hash::Hasher};
-                let mut hasher = DefaultHasher::new();
-                hasher.write_u64($f);
-                hasher.write_u64($r);
-                hasher.write_u64($k);
-                hasher.write_u64($w);
-                hasher.write_u64(type_sig);
-                hasher.finish()
-            }
-
             pub fn create_mem_lookup<T>() -> MemLookup<T> {
                 let permutations = Permutations::get_all_variants();
                 let indexes = permutations.into_iter().map(MemIndex::new).collect();
                 MemLookup::new(indexes)
             }
 
-            pub fn create_memmap_lookup<T: Copy>(
-                sig: u64,
+            pub fn create_memmap_lookup<T: Copy + 'static>(
                 path: &std::path::Path,
             ) -> Result<MemMapLookup<T>, hloo::index::MemMapIndexError> {
-                let sig = Self::signature(sig);
+                let sig = hloo::util::sign_type::<T>($f, $r, $k, $w);
                 Ok(MemMapLookup::create(Permutations::get_all_variants(), sig, path)?)
             }
 
-            pub fn load_memmap_lookup<T: Copy>(
-                sig: u64,
+            pub fn load_memmap_lookup<T: Copy + 'static>(
                 path: &std::path::Path,
             ) -> Result<MemMapLookup<T>, hloo::index::MemMapIndexError> {
-                let sig = Self::signature(sig);
+                let sig = hloo::util::sign_type::<T>($f, $r, $k, $w);
                 Ok(MemMapLookup::load(Permutations::get_all_variants(), sig, path)?)
             }
         }
