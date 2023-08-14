@@ -11,7 +11,7 @@ use crate::{
     DynBitPermuter,
 };
 
-use super::{block_locator::BlockLocator, extract_key, Index, IndexStats, PersistentIndex};
+use super::{extract_key, BlockLocator, Index, IndexStats, PersistentIndex};
 
 pub type MemMapIndexError = MmVecError;
 
@@ -33,7 +33,7 @@ where
     pub(crate) fn new_with_data(permuter: DynBitPermuter<K, M>, data: MmVec<(K, V)>) -> Self {
         Self {
             permuter,
-            block_locator: BlockLocator::DoubleBsearch,
+            block_locator: BlockLocator::BinarySearch,
             current_stats: IndexStats::default(),
             data,
             _dummy: PhantomData,

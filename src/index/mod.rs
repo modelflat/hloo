@@ -1,6 +1,3 @@
-mod block_locator;
-pub use block_locator::BlockLocator;
-
 mod stats;
 pub use stats::IndexStats;
 
@@ -15,6 +12,26 @@ use std::{hash::Hash, path::Path};
 use hloo_core::Distance;
 
 use crate::DynBitPermuter;
+
+use std::cmp::Ordering;
+
+use crate::util::extended_binary_search_by;
+
+/// Locates continuous blocks in sorted slices.
+#[derive(Clone, Copy, Debug)]
+pub enum BlockLocator {
+    /// Performs well on any block size.
+    BinarySearch,
+}
+
+impl BlockLocator {
+    #[inline(always)]
+    pub fn locate_by<'a, T>(&'_ self, slice: &'a [T], f: impl Fn(&T) -> Ordering) -> &'a [T] {
+        match self {
+            BlockLocator::BinarySearch => extended_binary_search_by(slice, f),
+        }
+    }
+}
 
 /// Represents a single block of potential candidates for a distance search.
 pub struct Candidates<'a, K, V> {

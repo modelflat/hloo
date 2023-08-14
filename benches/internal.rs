@@ -29,7 +29,7 @@ fn locate_block_bench(c: &mut Criterion) {
         group.bench_function(format!("blocks: {}", n_blocks), |b| {
             b.iter(|| {
                 let key = inputs_iter.next().unwrap();
-                BlockLocator::DoubleBsearch.locate_by(&data, |&(x, _)| x.cmp(&key));
+                BlockLocator::BinarySearch.locate_by(&data, |&(x, _)| x.cmp(&key));
             })
         });
     }

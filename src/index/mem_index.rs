@@ -4,7 +4,7 @@ use hloo_core::Distance;
 
 use crate::DynBitPermuter;
 
-use super::{block_locator::BlockLocator, extract_key, Index, IndexStats};
+use super::{extract_key, BlockLocator, Index, IndexStats};
 
 pub struct MemIndex<K, V, M> {
     permuter: DynBitPermuter<K, M>,
@@ -22,7 +22,7 @@ where
     pub fn new(permuter: DynBitPermuter<K, M>) -> Self {
         Self {
             permuter,
-            block_locator: BlockLocator::DoubleBsearch,
+            block_locator: BlockLocator::BinarySearch,
             current_stats: IndexStats::default(),
             data: Vec::new(),
             _dummy: PhantomData,
