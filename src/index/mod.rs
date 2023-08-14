@@ -9,7 +9,7 @@ pub use memmap_index::{MemMapIndex, MemMapIndexError};
 
 use std::{hash::Hash, path::Path};
 
-use hloo_core::{BitPermuter, Distance};
+use hloo_core::{BitContainer, BitPermuter};
 
 use crate::DynBitPermuter;
 
@@ -41,7 +41,7 @@ pub struct Candidates<'a, K, V> {
 
 impl<'a, K, V> Candidates<'a, K, V>
 where
-    K: Distance,
+    K: BitContainer,
     V: Clone,
 {
     pub fn new(key: K, block: &'a [(K, V)]) -> Self {
@@ -116,7 +116,7 @@ where
 /// [the paper](https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/33026.pdf)
 pub trait Index<K, V, M>
 where
-    K: Distance,
+    K: BitContainer,
     M: Ord,
     V: Clone,
 {
@@ -182,7 +182,7 @@ pub fn extract_key<K: Copy, V>(item: &(K, V)) -> K {
 }
 
 /// Perform a naive distance search for a key with a given distance.
-pub fn naive_search<K: Distance, V: Clone>(data: &[(K, V)], key: K, distance: u32) -> Vec<SearchResultItem<V>> {
+pub fn naive_search<K: BitContainer, V: Clone>(data: &[(K, V)], key: K, distance: u32) -> Vec<SearchResultItem<V>> {
     Candidates::new(key, data).scan(distance)
 }
 
@@ -192,7 +192,21 @@ mod tests {
 
     struct MyKey(u32);
 
-    impl Distance for MyKey {
+    impl BitContainer for MyKey {
+        type Data = u32;
+
+        fn data(&self) -> &Self::Data {
+            unimplemented!()
+        }
+
+        fn data_mut(&mut self) -> &mut Self::Data {
+            unimplemented!()
+        }
+
+        fn bit(&self, _: usize) -> bool {
+            unimplemented!()
+        }
+
         fn xor_dist(&self, other: &Self) -> u32 {
             self.0.abs_diff(other.0)
         }

@@ -4,12 +4,18 @@ mod permutations;
 pub use bit_block::{BitBlock, BitOp, PermutedBitBlock};
 pub use permutations::{create_permutations, Permutation};
 
-/// std::ops::Index for bits.
-pub trait BitIndex {
-    fn index(&self, idx: usize) -> bool;
-}
+pub trait BitContainer {
+    type Data;
 
-pub trait Distance {
+    /// Get underlying data container.
+    fn data(&self) -> &Self::Data;
+
+    /// Get underlying data container.
+    fn data_mut(&mut self) -> &mut Self::Data;
+
+    /// Get a single bit value.
+    fn bit(&self, idx: usize) -> bool;
+
     /// Compute distance as number of different bits between `self` and `other`.
     fn xor_dist(&self, other: &Self) -> u32;
 }

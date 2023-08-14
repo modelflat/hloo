@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, marker::PhantomData};
 
-use hloo_core::{BitPermuter, Distance};
+use hloo_core::{BitContainer, BitPermuter};
 
 use crate::DynBitPermuter;
 
@@ -32,7 +32,7 @@ where
 
 impl<K, V, M> Index<K, V, M> for MemIndex<K, V, M>
 where
-    K: Copy + Distance + Ord,
+    K: Copy + BitContainer + Ord,
     V: Copy,
     M: Copy + Ord,
 {
@@ -74,7 +74,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use hloo_core::{BitIndex, BitPermuter, Distance};
+    use hloo_core::{BitContainer, BitPermuter};
     use hloo_macros::make_permutations;
 
     use super::*;

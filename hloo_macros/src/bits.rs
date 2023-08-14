@@ -159,12 +159,6 @@ impl ToTokens for Bits<'_> {
                 }
             }
 
-            impl BitIndex for #type_name {
-                fn index(&self, idx: usize) -> bool {
-                    self.get(idx)
-                }
-            }
-
             impl std::string::ToString for #type_name {
                 fn to_string(&self) -> String {
                     let mut result = String::with_capacity(#byte_size * 2);
@@ -175,7 +169,21 @@ impl ToTokens for Bits<'_> {
                 }
             }
 
-            impl Distance for #type_name {
+            impl BitContainer for #type_name {
+                type Data = #storage_type_name;
+
+                fn data(&self) -> &Self::Data {
+                    &self.data
+                }
+
+                fn data_mut(&mut self) -> &mut Self::Data {
+                    &mut self.data
+                }
+
+                fn bit(&self, idx: usize) -> bool {
+                    self.get(idx)
+                }
+
                 fn xor_dist(&self, other: &Self) -> u32 {
                     let mut result = 0;
                     #(result += (self.data[#word_range_xor] ^ other.data[#word_range_xor]).count_ones());*;

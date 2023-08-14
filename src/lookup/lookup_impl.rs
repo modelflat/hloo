@@ -34,7 +34,7 @@ macro_rules! impl_lookups {
             pub use internal::{Bits, Mask, Permutations};
 
             mod internal {
-                use hloo_core::{BitIndex, BitPermuter, Distance};
+                use hloo_core::{BitContainer, BitPermuter};
                 crate::make_permutations!(struct_name = "Permutations", f = $f, r = $r, k = $k, w = $w);
             }
 
@@ -81,6 +81,23 @@ macro_rules! impl_lookups {
 }
 
 impl_lookups!(lookup64, 64, 4, 1, 64);
-impl_lookups!(lookup128, 128, 5, 1, 64);
-impl_lookups!(lookup192, 192, 6, 1, 64);
 impl_lookups!(lookup256, 256, 8, 1, 64);
+
+pub enum DynBits {
+    Bits64(lookup64::Bits),
+    Bits256(lookup256::Bits),
+}
+
+impl From<&[u8]> for DynBits {
+    fn from(value: &[u8]) -> Self {
+        match value.len() {
+            lookup64::Bits::SIZE_BYTES => Self::Bits64(lookup64::Bits::from_le_bytes(value)),
+            lookup256::Bits::SIZE_BYTES => Self::Bits256(lookup256::Bits::from_le_bytes(value)),
+            len => panic!("invalid slice size: {}", len),
+        }
+    }
+}
+
+pub enum DynBitsVec {
+    Bits64(lookup64::Bits),
+}

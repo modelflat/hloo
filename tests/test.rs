@@ -26,7 +26,7 @@ fn flip_bits(mut bits: Bits, n: usize) -> Bits {
     bits
 }
 
-fn naive_search<K: Distance, V: Clone>(data: &[(K, V)], key: K, distance: u32) -> Vec<SearchResultItem<V>> {
+fn naive_search<K: BitContainer, V: Clone>(data: &[(K, V)], key: K, distance: u32) -> Vec<SearchResultItem<V>> {
     Candidates::new(key, data).scan(distance)
 }
 

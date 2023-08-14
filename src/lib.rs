@@ -13,7 +13,7 @@
 //! Alternatively, you can use one of the pre-defined implementations:
 //!
 //! ```
-//! use hloo::lookup::lookup_impl::{lookup64, lookup128, lookup192, lookup256};
+//! use hloo::lookup::lookup_impl::{lookup64, lookup256};
 //!
 //! // in-memory
 //! let mem_lookup = lookup64::MemLookup::<i64>::new();
@@ -46,7 +46,7 @@ pub type DynBitPermuter<B, M> = Box<dyn hloo_core::BitPermuter<Bits = B, Mask = 
 macro_rules! init_lookup {
     ($name:ident,$f:literal,$r:literal,$k:literal,$w:literal) => {
         use hloo::{
-            hloo_core::{BitIndex, BitPermuter, Distance},
+            hloo_core::{BitContainer, BitPermuter},
             Lookup,
         };
         hloo::make_permutations!(struct_name = "Permutations", f = $f, r = $r, k = $k, w = $w);

@@ -2,7 +2,7 @@ pub mod lookup_impl;
 
 use std::{collections::HashSet, hash::Hash, marker::PhantomData, path::Path};
 
-use hloo_core::Distance;
+use hloo_core::BitContainer;
 
 use crate::{
     index::{Index, PersistentIndex, SearchResultItem},
@@ -35,7 +35,7 @@ pub type IndexResult<T, K, V, M, I> = Result<T, <I as Index<K, V, M>>::Error>;
 
 pub trait Lookup<K, V, M>
 where
-    K: Distance + Ord,
+    K: BitContainer + Ord,
     V: Clone,
     M: Ord,
 {
@@ -126,7 +126,7 @@ impl<K, V, M, I> SimpleLookup<K, V, M, I> {
 
 impl<K, V, M, I> SimpleLookup<K, V, M, I>
 where
-    K: Distance,
+    K: BitContainer,
     V: Clone,
     M: Ord,
     I: Index<K, V, M> + PersistentIndex<K, M>,
@@ -160,7 +160,7 @@ where
 
 impl<K, V, M, I> Lookup<K, V, M> for SimpleLookup<K, V, M, I>
 where
-    K: Distance + Ord,
+    K: BitContainer + Ord,
     V: Clone,
     M: Ord,
     I: Index<K, V, M>,

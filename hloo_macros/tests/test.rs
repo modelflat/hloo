@@ -1,6 +1,6 @@
 use rand::random;
 
-use hloo_core::{BitIndex, BitPermuter, Distance};
+use hloo_core::{BitContainer, BitPermuter};
 use hloo_macros::make_permutations;
 
 #[test]
