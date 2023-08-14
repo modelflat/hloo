@@ -1,3 +1,5 @@
+//! Memory-mapped vector implementation.
+
 use core::slice;
 use std::{
     fs::{copy, remove_file, rename, File, OpenOptions},

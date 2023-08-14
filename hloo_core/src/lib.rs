@@ -30,8 +30,3 @@ pub trait BitPermuter {
     /// Get number of blocks this permuter operates on
     fn n_blocks(&self) -> u32;
 }
-
-// /// A `hloo`-specific trait for search.
-// pub trait Index<B> {
-//     fn locate_block(&self, locator: BlockLocator) -> &[T];
-// }
