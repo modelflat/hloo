@@ -1,11 +1,8 @@
 use std::collections::HashSet;
 
-use hloo::{
-    index::{Candidates, SearchResultItem},
-    init_lookup,
-};
+use hloo::index::{Candidates, SearchResultItem};
 
-init_lookup!(LookupUtil, 32, 5, 1, 32);
+hloo::init_lookup!(LookupUtil, 32, 5, 1, 32);
 // 7 7 6 6 6
 
 fn generate_data(n: usize) -> Vec<(Bits, i64)> {

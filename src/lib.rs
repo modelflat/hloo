@@ -9,6 +9,12 @@
 //! lookup.insert(&[(Bits::default(), 123456)]);
 //! lookup.search(&Bits::default(), 4);
 //! ```
+//!
+//! Alternatively, you can use one of the pre-defined implementations:
+//!
+//! ```
+//! use hloo::lookup::lookup_impl::{lookup64, lookup128, lookup192, lookup256};
+//! ```
 
 pub mod index;
 pub mod lookup;
@@ -22,7 +28,7 @@ pub use hloo_core;
 pub use hloo_macros::make_permutations;
 
 pub use index::Index;
-pub use lookup::Lookup;
+pub use lookup::{Lookup, SimpleLookup};
 
 pub type DynIndex<K, V, M, E> = Arc<dyn Index<K, V, M, Error = E>>;
 
@@ -32,7 +38,10 @@ pub type DynBitPermuter<B, M> = Arc<dyn hloo_core::BitPermuter<Bits = B, Mask = 
 #[macro_export]
 macro_rules! init_lookup {
     ($name:ident,$f:literal,$r:literal,$k:literal,$w:literal) => {
-        use hloo::hloo_core::{BitIndex, BitPermuter, Distance};
+        use hloo::{
+            hloo_core::{BitIndex, BitPermuter, Distance},
+            Lookup,
+        };
         hloo::make_permutations!(struct_name = "Permutations", f = $f, r = $r, k = $k, w = $w);
 
         #[doc = "This struct can create or load lookups with the following underlying "]
@@ -49,10 +58,9 @@ macro_rules! init_lookup {
         pub type Permuter = hloo::DynBitPermuter<Bits, Mask>;
 
         pub type MemIndex<T> = hloo::index::MemIndex<Bits, T, Mask>;
-        pub type MemLookup<T> = hloo::Lookup<Bits, T, Mask, MemIndex<T>>;
-
+        pub type MemLookup<T> = hloo::SimpleLookup<Bits, T, Mask, MemIndex<T>>;
         pub type MemMapIndex<T> = hloo::index::MemMapIndex<Bits, T, Mask>;
-        pub type MemMapLookup<T> = hloo::Lookup<Bits, T, Mask, MemMapIndex<T>>;
+        pub type MemMapLookup<T> = hloo::SimpleLookup<Bits, T, Mask, MemMapIndex<T>>;
 
         impl $name {
             pub fn signature(type_sig: u64) -> u64 {

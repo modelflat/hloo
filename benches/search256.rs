@@ -3,9 +3,11 @@ use std::time::Duration;
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use data_gen::{flip_bits, generate_uniform_data, generate_uniform_data_with_block_size, rand_pos};
-use hloo::index::naive_search;
-
-hloo::init_lookup!(LookupUtil, 256, 5, 1, 64);
+use hloo::{
+    index::naive_search,
+    lookup::lookup_impl::lookup256::{Bits, MemLookup, MemMapLookup},
+    Lookup,
+};
 
 fn generate_perfect_data(n: usize, _: usize) -> Vec<(Bits, usize)> {
     generate_uniform_data(n).map(|(k, v)| (Bits::new(k), v)).collect()
@@ -32,14 +34,14 @@ fn search256_bench(c: &mut Criterion) {
 
         group.bench_function("naive", |b| b.iter(|| naive_search(&data, target, 3)));
 
-        let mut lookup1 = LookupUtil::create_mem_lookup();
+        let mut lookup1 = MemLookup::new();
         println!("inserting data into in-memory...");
         lookup1.insert(&data).unwrap();
         group.bench_function("hloo in-memory", |b| b.iter(|| lookup1.search(&target, 3)));
 
         let temp_dir = tempfile::tempdir().unwrap();
         println!("inserting data into mem-mapped...");
-        let mut lookup2 = LookupUtil::create_memmap_lookup(0, temp_dir.path()).unwrap();
+        let mut lookup2 = MemMapLookup::create(0, temp_dir.path()).unwrap();
         lookup2.insert(&data).unwrap();
         group.bench_function("hloo mem-mapped", |b| b.iter(|| lookup2.search(&target, 3)));
 
