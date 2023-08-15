@@ -123,7 +123,7 @@ where
     type Error;
 
     /// Get permuter reference.
-    fn permuter(&self) -> &dyn BitPermuter<Bits = K, Mask = M>;
+    fn permuter(&self) -> &dyn BitPermuter<K, M>;
 
     /// Get currently used BlockLocator.
     fn block_locator(&self) -> BlockLocator;
@@ -190,6 +190,7 @@ pub fn naive_search<K: BitContainer, V: Clone>(data: &[(K, V)], key: K, distance
 mod tests {
     use super::*;
 
+    #[derive(Default)]
     struct MyKey(u32);
 
     impl BitContainer for MyKey {

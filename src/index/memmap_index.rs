@@ -59,7 +59,7 @@ where
 {
     type Error = MmVecError;
 
-    fn permuter(&self) -> &dyn BitPermuter<Bits = K, Mask = M> {
+    fn permuter(&self) -> &dyn BitPermuter<K, M> {
         self.permuter.as_ref()
     }
 

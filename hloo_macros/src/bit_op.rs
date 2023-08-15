@@ -25,11 +25,11 @@ impl ToTokens for BitOp<'_> {
                 let shift = src_shift.abs();
                 if src_shift < 0 {
                     quote! {
-                        nw.data[#dst_word] |= (w.data[#src_word] & (#src_mask as #word_type_name)) >> #shift
+                        out[#dst_word] |= (inp[#src_word] & (#src_mask as #word_type_name)) >> #shift
                     }
                 } else {
                     quote! {
-                        nw.data[#dst_word] |= (w.data[#src_word] & (#src_mask as #word_type_name)) << #shift
+                        out[#dst_word] |= (inp[#src_word] & (#src_mask as #word_type_name)) << #shift
                     }
                 }
             }
@@ -38,10 +38,10 @@ impl ToTokens for BitOp<'_> {
                 src_mask,
                 dst_word,
             } => quote! {
-                nw.data[#dst_word] |= w.data[#src_word] & (#src_mask as #word_type_name)
+                out[#dst_word] |= inp[#src_word] & (#src_mask as #word_type_name)
             },
             hloo_core::BitOp::Copy { src_word, dst_word } => quote! {
-                nw.data[#dst_word] = w.data[#src_word]
+                out[#dst_word] = inp[#src_word]
             },
         };
         tokens.extend(op_tokens);

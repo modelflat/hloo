@@ -62,38 +62,43 @@ impl ToTokens for Permutation<'_> {
         let data_type_name = self.data_type_name;
         let mask_type_name = self.mask_type_name;
         let n_blocks = self.perm.blocks().len();
-        let mask_bits = self.perm.mask_bits();
 
         let code = quote! {
             #[derive(Clone, Copy)]
             pub struct #struct_name;
 
-            impl #struct_name {
-                fn mask_bits(&self) -> u32 {
-                    #mask_bits as u32
-                }
-            }
-
-            impl hloo_core::BitPermuter for #struct_name {
-                type Bits = #data_type_name;
-                type Mask = #mask_type_name;
-
-                fn apply(&self, w: &Self::Bits) -> Self::Bits {
+            impl BitPermuter<#data_type_name, #mask_type_name> for #struct_name {
+                fn apply_static(w: &#data_type_name) -> #data_type_name {
                     let mut nw: #data_type_name = Default::default();
+                    let (inp, mut out) = (w.data(), nw.data_mut());
                     #(#apply_ops);*;
                     nw
                 }
 
-                fn revert(&self, w: &Self::Bits) -> Self::Bits {
-                    let mut nw: Self::Bits = Default::default();
+                fn revert_static(w: &#data_type_name) -> #data_type_name {
+                    let mut nw: #data_type_name = Default::default();
+                    let (inp, mut out) = (w.data(), nw.data_mut());
                     #(#revert_ops);*;
                     nw
                 }
 
-                fn mask(&self, w: &Self::Bits) -> Self::Mask {
-                    let mut nw: Self::Mask = Default::default();
+                fn mask_static(w: &#data_type_name) -> #mask_type_name {
+                    let mut nw: #mask_type_name = Default::default();
+                    let (inp, mut out) = (w.data(), nw.data_mut());
                     #(#mask_ops);*;
                     nw
+                }
+
+                fn apply(&self, w: &#data_type_name) -> #data_type_name {
+                    Self::apply_static(w)
+                }
+
+                fn revert(&self, w: &#data_type_name) -> #data_type_name {
+                    Self::revert_static(w)
+                }
+
+                fn mask(&self, w: &#data_type_name) -> #mask_type_name {
+                    Self::mask_static(w)
                 }
 
                 fn n_blocks(&self) -> u32 {
