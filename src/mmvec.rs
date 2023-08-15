@@ -132,10 +132,10 @@ where
     /// Destroys self, removing the underlying file.
     pub fn destroy(mut self) -> Result<(), MmVecError> {
         let path = self.path.clone();
-        if let Some(data) = self.data.take() {
-            data.file.unlock()?;
-        }
+        drop(self.data.take());
+
         remove_file(path)?;
+
         Ok(())
     }
 
@@ -153,9 +153,7 @@ where
     pub fn move_to(mut self, path: PathBuf) -> Result<Self, MmVecError> {
         self.flush()?;
         let current_path = self.path;
-        if let Some(data) = self.data.take() {
-            data.file.unlock()?;
-        }
+        drop(self.data.take());
 
         rename(&current_path, &path)?;
 
@@ -208,9 +206,7 @@ where
         // The safest option is to just drop and recreate the Data.
         #[cfg(windows)]
         {
-            if let Some(data) = self.data.take() {
-                data.file.unlock()?;
-            }
+            drop(self.data.take());
 
             let file = open_file(self.path())?;
             file.try_lock_exclusive()?;
@@ -394,6 +390,7 @@ where
 {
     fn drop(&mut self) {
         let _ = self.flush();
+        let _ = self.file.unlock().ok();
     }
 }
 
