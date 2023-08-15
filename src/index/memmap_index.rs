@@ -112,8 +112,7 @@ where
     }
 
     fn load(permuter: DynBitPermuter<K, M>, sig: u64, path: &Path) -> Result<Self, Self::Error> {
-        // SAFETY: ???
-        let data = unsafe { MmVec::from_path(sig, path.to_path_buf())? };
+        let data = MmVec::from_path(sig, path.to_path_buf())?;
         Ok(Self::new_with_data(permuter, data))
     }
 

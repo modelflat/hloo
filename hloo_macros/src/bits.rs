@@ -148,7 +148,7 @@ impl ToTokens for Bits<'_> {
             }
 
             impl std::iter::FromIterator<bool> for #type_name {
-                fn from_iter<T: std::iter::IntoIterator<Item = bool>>(iter: T) -> Self {
+                fn from_iter<I: std::iter::IntoIterator<Item = bool>>(iter: I) -> Self {
                     let mut val = Self::default();
                     for (i, el) in iter.into_iter().enumerate().take(Self::SIZE_BITS) {
                         let word = i / #word_size;

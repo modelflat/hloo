@@ -43,10 +43,7 @@ where
 
     /// Creates an uninitialized vector with given length.
     fn with_length_uninit(sig: u64, len: usize, path: PathBuf) -> Result<Self, MmVecError> {
-        let file = create_new_file(&path)?;
-        file.try_lock_exclusive()?;
-        // SAFETY: we hold an exclusive file lock.
-        let data = unsafe { Data::new_uninit(file, sig, len)? };
+        let data = Data::new_uninit(&path, sig, len)?;
         Ok(Self::new(data, path))
     }
 
@@ -56,27 +53,16 @@ where
     }
 
     /// Dumps a slice into path, then mmaps it.
-    ///
-    /// ## Safety
-    /// Creating mmap is unsafe.
     pub fn from_slice(sig: u64, slice: &[T], path: PathBuf) -> Result<Self, MmVecError> {
-        let file = create_new_file(&path)?;
-        file.try_lock_exclusive()?;
-        // SAFETY: we hold an exclusive file lock.
-        let data = unsafe { Data::new_with_data(file, sig, slice)? };
+        let data = Data::new_with_data(&path, sig, slice)?;
         Ok(Self::new(data, path))
     }
 
-    /// Try to create a vector from the given path. Returns error if the signature does not match, or if
+    /// Try to create a vector from the given path. Returns an error if the signature does not match, or if
     /// the vector is not completely initialized.
-    ///
-    /// ## Safety
-    /// We check signature and length of the file, and also lock it; but there is still no strong guarantee that
-    /// the file indeed contains [T].
-    pub unsafe fn from_path(sig: u64, path: PathBuf) -> Result<Self, MmVecError> {
-        let file = open_file(&path)?;
-        file.try_lock_exclusive()?;
-        let data = Data::<T>::from_file_unchecked(file)?;
+    pub fn from_path(sig: u64, path: PathBuf) -> Result<Self, MmVecError> {
+        // Safety: this is safe, because we are going to check the data.
+        let data = unsafe { Data::<T>::from_file_unchecked(&path)? };
         if data.sig() != sig {
             return Err(MmVecError::SignatureMismatch {
                 expected: sig,
@@ -105,24 +91,16 @@ where
     /// Length of this vector.
     #[must_use]
     pub fn len(&self) -> usize {
-        // SAFETY: Underlying file is locked exclusively.
-        self.data.as_ref().map_or(0, |d| unsafe { d.len() } as usize)
+        self.data.as_ref().map_or(0, |d| d.len() as usize)
     }
 
     /// Signature of this vector.
-    ///
-    /// ## Safety
-    /// Unsafe since we can't guarantee that the mmapped file has not been tampered with
     #[must_use]
     pub fn sig(&self) -> u64 {
-        // SAFETY: Underlying file is locked exclusively.
-        self.data.as_ref().map_or(u64::MAX, |d| unsafe { d.sig() })
+        self.data.as_ref().map_or(u64::MAX, |d| d.sig())
     }
 
     /// Whether this vector is empty.
-    ///
-    /// ## Safety
-    /// Unsafe since we can't guarantee that the mmapped file has not been tampered with
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
@@ -166,11 +144,9 @@ where
         self.flush()?;
         copy(&self.path, &path)?;
 
-        let copied = open_file(&path)?;
-        copied.try_lock_exclusive()?;
-        // SAFETY: File is locked.
-        let copied_data = unsafe { Data::from_file_unchecked(copied)? };
-        Ok(Self::new(copied_data, path))
+        // Safety: this is safe because we know that the file contains valid data.
+        let copied = unsafe { Data::from_file_unchecked(&path)? };
+        Ok(Self::new(copied, path))
     }
 
     /// Moves self into path, and returns a new vector at this path.
@@ -183,11 +159,9 @@ where
 
         rename(&current_path, &path)?;
 
-        let moved = open_file(&path)?;
-        moved.try_lock_exclusive()?;
-        // SAFETY: File is locked.
-        let moved_data = unsafe { Data::from_file_unchecked(moved)? };
-        Ok(Self::new(moved_data, path))
+        // Safety: this is safe because we know that the file contains valid data.
+        let moved = unsafe { Data::from_file_unchecked(&path)? };
+        Ok(Self::new(moved, path))
     }
 
     /// Insert items into vector, preserving sorted order.
@@ -268,11 +242,82 @@ where
 {
     const HEADER_SIZE: u64 = 16;
 
+    /// The caller must ensure that the file is not tampered with, and contains a valid `Data`
+    unsafe fn from_file_unchecked_impl(file: File) -> io::Result<Self> {
+        let len_bytes = file.metadata()?.len();
+
+        // TODO proper error
+        assert!(len_bytes >= Self::HEADER_SIZE, "file is too small");
+
+        let header_mmap = mmap(&file, 0, Self::HEADER_SIZE as usize)?;
+        let data_mmap = mmap(&file, Self::HEADER_SIZE, (len_bytes - Self::HEADER_SIZE) as usize)?;
+
+        Ok(Self {
+            file,
+            header_mmap,
+            data_mmap,
+            dummy: PhantomData,
+        })
+    }
+
+    /// Memory-maps the file. The caller must ensure that the file contains a valid `Data`
+    unsafe fn from_file_unchecked(path: &Path) -> io::Result<Self> {
+        let file = open_file(path)?;
+        file.try_lock_exclusive()?;
+        Self::from_file_unchecked_impl(file)
+    }
+
+    /// Memory maps the file, resizing it to fit `len` Ts.
+    #[allow(unused)]
+    fn from_file_unchecked_resized(file: File, len: usize) -> io::Result<Self> {
+        file.try_lock_exclusive()?;
+        resize_file_to_fit::<T>(&file, Self::HEADER_SIZE, len)?;
+        // Safety:
+        // It is safe to memory-map this file, because:
+        // 1) We own the file handle and hold an exclusive file lock.
+        // 2) We do not read any data from the memory maps.
+        let mut data = unsafe { Self::from_file_unchecked_impl(file)? };
+        // Safety: we know that the file is sized to contain exactly len Ts
+        unsafe { data.set_len(len as u64) };
+        Ok(data)
+    }
+
+    /// Memory maps the file, resizing it to fit `len` Ts and initializing the header section.
+    pub fn new_uninit(path: &Path, sig: u64, len: usize) -> io::Result<Self> {
+        let file = create_new_file(path)?;
+        file.try_lock_exclusive()?;
+        resize_file_to_fit::<T>(&file, Self::HEADER_SIZE, len)?;
+        // Safety:
+        // It is safe to memory-map this file, because:
+        // 1) We own the file handle and hold an exclusive file lock.
+        // 2) We do not read any data from the memory maps.
+        let mut data = unsafe { Self::from_file_unchecked_impl(file)? };
+        data.set_sig(sig);
+        // Safety: we know that the file is sized to contain exactly len Ts
+        unsafe { data.set_len(len as u64) };
+        data.header_mmap.flush()?;
+        Ok(data)
+    }
+
+    /// Memory maps the file, resizing it to fit `len` Ts, initializing header section and copying the
+    /// data from `slice` into it.
+    pub fn new_with_data(path: &Path, sig: u64, slice: &[T]) -> io::Result<Self> {
+        let mut data = Self::new_uninit(path, sig, slice.len())?;
+        // Safety:
+        // It is safe to cast underlying data to &mut [T] and then write to it because:
+        // 1) we own the file handle and hold an exclusive file lock;
+        // 2) we won't read any uninitialized data;
+        // 3) `Self::new_uninit` created a file which is sized to hold exactly `slice.len()` Ts - so we know
+        // that we can fill it with `slice.len()` valid Ts.
+        unsafe { data.as_slice_mut() }.copy_from_slice(slice);
+        Ok(data)
+    }
+
     fn header_offset(&self, offset: usize) -> *const u8 {
         let start = self.header_mmap.as_ptr() as *const u8;
         assert!(offset < Self::HEADER_SIZE as usize, "offset is out of bounds");
         assert!(offset % 8 == 0, "offset is not placed on u64 boundary");
-        // SAFETY: we checked prerequisites for `add`
+        // Safety: we checked prerequisites for `add`
         unsafe { start.add(offset) }
     }
 
@@ -280,20 +325,34 @@ where
         let start = self.header_mmap.as_mut_ptr() as *mut u8;
         assert!(offset < Self::HEADER_SIZE as usize, "offset is out of bounds");
         assert!(offset % 8 == 0, "offset is not placed on u64 boundary");
-        // SAFETY: we checked prerequisites for `add`
+        // Safety: we checked prerequisites for `add`
         unsafe { start.add(offset) }
     }
 
-    pub unsafe fn sig(&self) -> u64 {
-        *(self.header_offset(0) as *const u64)
+    pub fn sig(&self) -> u64 {
+        // Safety:
+        // It is safe to read from this memory-mapped location because:
+        // 1) we own the file handle
+        // 2) it is exclusively locked by us
+        // 3) we know that this location is not out of bounds because we checked the file length on creation.
+        unsafe { *(self.header_offset(0) as *const u64) }
     }
 
-    unsafe fn set_sig(&mut self, sig: u64) {
-        *(self.header_offset_mut(0) as *mut u64) = sig;
+    fn set_sig(&mut self, sig: u64) {
+        // Safety:
+        // It is safe to write to this memory-mapped location because:
+        // 1) we own the file handle
+        // 2) it is exclusively locked by us
+        // 3) we know that this location is not out of bounds because we checked the file length on creation.
+        unsafe {
+            *(self.header_offset_mut(0) as *mut u64) = sig;
+        }
     }
 
-    pub unsafe fn len(&self) -> u64 {
-        *(self.header_offset(8) as *const u64)
+    pub fn len(&self) -> u64 {
+        // Safety:
+        // See safety comment in `.sig()`, same applies here.
+        unsafe { *(self.header_offset(8) as *const u64) }
     }
 
     unsafe fn set_len(&mut self, len: u64) {
@@ -312,49 +371,11 @@ where
         slice::from_raw_parts_mut(self.data_mmap.as_mut_ptr() as *mut T, self.len() as usize)
     }
 
-    pub unsafe fn from_file_unchecked(file: File) -> io::Result<Self> {
-        let len_bytes = file.metadata()?.len();
-        let header_mmap = mmap(&file, 0, Self::HEADER_SIZE as usize)?;
-        let data_mmap = mmap(&file, Self::HEADER_SIZE, (len_bytes - Self::HEADER_SIZE) as usize)?;
-        Ok(Self {
-            file,
-            header_mmap,
-            data_mmap,
-            dummy: PhantomData,
-        })
-    }
-
-    #[allow(unused)]
-    pub unsafe fn from_file_unchecked_resized(file: File, len: usize) -> io::Result<Self> {
-        resize_file_to_fit::<T>(&file, Self::HEADER_SIZE, len)?;
-        let mut data = Self::from_file_unchecked(file)?;
-        data.set_len(len as u64);
-        Ok(data)
-    }
-
-    pub unsafe fn new_uninit(file: File, sig: u64, len: usize) -> io::Result<Self> {
-        resize_file_to_fit::<T>(&file, Self::HEADER_SIZE, len)?;
-        let mut data = Self::from_file_unchecked(file)?;
-        data.set_sig(sig);
-        data.set_len(len as u64);
-        data.header_mmap.flush()?;
-        Ok(data)
-    }
-
-    pub unsafe fn new_with_data(file: File, sig: u64, slice: &[T]) -> io::Result<Self> {
-        resize_file_to_fit::<T>(&file, Self::HEADER_SIZE, slice.len())?;
-        let mut data = Self::from_file_unchecked(file)?;
-        data.set_sig(sig);
-        data.set_len(slice.len() as u64);
-        data.as_slice_mut().copy_from_slice(slice);
-        data.header_mmap.flush()?;
-        Ok(data)
-    }
-
     #[cfg(not(windows))]
     pub unsafe fn resize(&mut self, len: usize) -> io::Result<()> {
         self.flush()?;
         let new_len_bytes = resize_file_to_fit::<T>(&self.file, Self::HEADER_SIZE, len)?;
+        // Safety: we own the file handle, have exclusive lock in place and know that
         self.data_mmap = mmap(&self.file, Self::HEADER_SIZE, new_len_bytes as usize)?;
         self.set_len(len as u64);
         Ok(())
@@ -428,45 +449,35 @@ mod tests {
     #[test]
     fn data_header_fields_are_correctly_initialized() {
         with_file_path(|test_path| {
-            let file = create_new_file(&test_path).expect("failed to create file");
-            unsafe {
-                let data = Data::<u64>::new_uninit(file, 42, 100).expect("failed to create data");
-                assert_eq!(data.sig(), 42, "sig");
-                assert_eq!(data.len(), 100, "len");
-            }
+            let data = Data::<u64>::new_uninit(test_path, 42, 100).expect("failed to create data");
+            assert_eq!(data.sig(), 42, "sig");
+            assert_eq!(data.len(), 100, "len");
         })
     }
 
     #[test]
     fn data_header_fields_can_be_set() {
         with_file_path(|test_path| {
-            let file = create_new_file(&test_path).expect("failed to create file");
-            unsafe {
-                let mut data = Data::<u64>::new_uninit(file, 42, 100).expect("failed to create data");
-                data.set_sig(420);
-                data.set_len(1000);
-                assert_eq!(data.sig(), 420, "sig");
-                assert_eq!(data.len(), 1000, "len");
-            }
+            let mut data = Data::<u64>::new_uninit(test_path, 42, 100).expect("failed to create data");
+            data.set_sig(420);
+            unsafe { data.set_len(1000) };
+            assert_eq!(data.sig(), 420, "sig");
+            assert_eq!(data.len(), 1000, "len");
         })
     }
 
     #[test]
     fn data_header_fields_can_be_read_after_data_is_recreated() {
         with_file_path(|test_path| {
-            let file = create_new_file(&test_path).expect("failed to create file");
-            unsafe {
-                let mut data = Data::<u64>::new_uninit(file, 42, 100).expect("failed to create data");
+            {
+                let mut data = Data::<u64>::new_uninit(test_path, 42, 100).expect("failed to create data");
                 data.set_sig(420);
-                data.set_len(1000);
+                unsafe { data.set_len(1000) };
             }
 
-            let file = open_file(&test_path).unwrap();
-            unsafe {
-                let data = Data::<u64>::from_file_unchecked(file).expect("failed to create data");
-                assert_eq!(data.sig(), 420, "sig");
-                assert_eq!(data.len(), 1000, "len");
-            }
+            let data = unsafe { Data::<u64>::from_file_unchecked(test_path) }.expect("failed to create data");
+            assert_eq!(data.sig(), 420, "sig");
+            assert_eq!(data.len(), 1000, "len");
         })
     }
 
@@ -474,10 +485,9 @@ mod tests {
     #[test]
     fn data_can_be_correctly_resized_grow() {
         with_file_path(|path| {
-            let file = create_new_file(path).expect("failed to create file");
-            unsafe {
-                let mut data = Data::<u64>::new_uninit(file, 42, 100).expect("failed to create data");
-                data.resize(1000).expect("failed to resize data");
+            {
+                let mut data = Data::<u64>::new_uninit(path, 42, 100).expect("failed to create data");
+                unsafe { data.resize(1000) }.expect("failed to resize data");
                 assert_eq!(data.len(), 1000, "updated len");
                 assert_eq!(
                     data.data_mmap.len(),
@@ -502,9 +512,8 @@ mod tests {
     #[test]
     fn data_can_be_correctly_resized_shrink() {
         with_file_path(|path| {
-            let file = create_new_file(path).expect("failed to create file");
             unsafe {
-                let mut data = Data::<u64>::new_uninit(file, 42, 100).expect("failed to create data");
+                let mut data = Data::<u64>::new_uninit(path, 42, 100).expect("failed to create data");
                 data.resize(10).expect("failed to resize data");
                 assert_eq!(data.len(), 10, "updated len");
                 assert_eq!(

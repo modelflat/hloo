@@ -8,7 +8,8 @@ hloo::init_lookup!(LookupUtil, 32, 5, 1, 32);
 fn generate_data(n: usize) -> Vec<(Bits, i64)> {
     let mut data = Vec::new();
     for i in 0..n {
-        data.push((Bits::new(data_gen::random()), i as i64))
+        let bits = Bits::new(data_gen::random());
+        data.push((bits, i as i64));
     }
     data
 }
@@ -67,7 +68,7 @@ fn mem_lookup_works_correctly() {
     let data = generate_data(10);
     let target = flip_bits(data[0].0, 3);
     lookup.insert(&data).unwrap();
-    let expected = naive_search(&data, target, 5).into_iter().collect::<HashSet<_>>();
+    let expected = naive_search(&data, target, 3).into_iter().collect::<HashSet<_>>();
     let result = lookup.search_simple(&target, 3);
     assert_eq!(
         result.len(),
@@ -88,7 +89,7 @@ fn memmap_lookup_works_correctly() {
     let data = generate_data(10);
     let target = flip_bits(data[0].0, 3);
     lookup.insert(&data).unwrap();
-    let expected = naive_search(&data, target, 5).into_iter().collect::<HashSet<_>>();
+    let expected = naive_search(&data, target, 3).into_iter().collect::<HashSet<_>>();
     let result = lookup.search_simple(&target, 3);
     assert_eq!(
         result.len(),
