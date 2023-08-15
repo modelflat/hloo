@@ -207,10 +207,7 @@ where
         #[cfg(windows)]
         {
             drop(self.data.take());
-
-            let file = open_file(self.path())?;
-            file.try_lock_exclusive()?;
-            self.data = Some(Data::from_file_unchecked_resized(file, new_len)?);
+            self.data = Some(Data::from_file_unchecked_resized(self.path(), new_len)?);
         }
 
         #[cfg(not(windows))]
@@ -265,7 +262,8 @@ where
 
     /// Memory maps the file, resizing it to fit `len` Ts.
     #[allow(unused)]
-    fn from_file_unchecked_resized(file: File, len: usize) -> io::Result<Self> {
+    fn from_file_unchecked_resized(path: &Path, len: usize) -> io::Result<Self> {
+        let file = open_file(path)?;
         file.try_lock_exclusive()?;
         resize_file_to_fit::<T>(&file, Self::HEADER_SIZE, len)?;
         // Safety:
@@ -438,6 +436,7 @@ mod tests {
         f(&test_path)
     }
 
+    #[allow(unused)]
     fn get_file_len(path: &Path) -> u64 {
         let file3 = open_file(&path).expect("failed to open file");
         file3.metadata().expect("failed to read metadata").len()
