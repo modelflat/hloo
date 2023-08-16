@@ -41,9 +41,9 @@ pub fn flip_bits<const S: usize>(mut bits: [u64; S], n: usize) -> [u64; S] {
         let pos = (rand::random::<f32>() * 31f32) as usize;
         let bit = (bits[0] & (1 << pos)) >> pos;
         if bit == 0 {
-            bits[0] = bits[0] | (1 << pos);
+            bits[0] |= 1 << pos;
         } else {
-            bits[0] = bits[0] & !(1 << pos);
+            bits[0] &= !(1 << pos);
         }
     }
     bits

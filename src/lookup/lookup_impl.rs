@@ -39,11 +39,12 @@ macro_rules! impl_lookups {
             }
 
             impl_lookup!(MemLookup, MemIndex);
-            impl<V> MemLookup<V>
+
+            impl<V> Default for MemLookup<V>
             where
                 V: Copy,
             {
-                pub fn new() -> Self {
+                fn default() -> Self {
                     let perms = Permutations::get_all_variants();
                     Self(SimpleLookup::new(perms.into_iter().map(MemIndex::new).collect()))
                 }

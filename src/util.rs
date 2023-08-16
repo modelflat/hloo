@@ -18,7 +18,7 @@ where
 
 /// Search for a value using binary search. If a value is found, return a slice starting at the first occurence
 /// of the found value, and ending at the last occurence (inclusive). If the value is not found, return empty slice.
-pub fn extended_binary_search_by<'a, T>(slice: &'a [T], f: impl Fn(&T) -> Ordering) -> &'a [T] {
+pub fn extended_binary_search_by<T>(slice: &[T], f: impl Fn(&T) -> Ordering) -> &[T] {
     let maybe_block_start = slice.binary_search_by(|el| {
         // 0 0 2 2 2 3 4 5 13
         //     ^st ^end

@@ -34,7 +34,7 @@ fn search256_bench(c: &mut Criterion) {
 
         group.bench_function("naive", |b| b.iter(|| naive_search(&data, target, 3)));
 
-        let mut lookup1 = MemLookup::new();
+        let mut lookup1 = MemLookup::default();
         println!("inserting data into in-memory...");
         lookup1.insert(&data).unwrap();
         group.bench_function("hloo in-memory", |b| b.iter(|| lookup1.search(&target, 3)));

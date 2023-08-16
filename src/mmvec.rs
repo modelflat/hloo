@@ -155,7 +155,7 @@ where
         let current_path = self.path;
         drop(self.data.take());
 
-        rename(&current_path, &path)?;
+        rename(current_path, &path)?;
 
         // Safety: this is safe because we know that the file contains valid data.
         let moved = unsafe { Data::from_file_unchecked(&path)? };

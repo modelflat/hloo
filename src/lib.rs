@@ -16,12 +16,14 @@
 //! use hloo::lookup::lookup_impl::{lookup64, lookup256};
 //!
 //! // in-memory
-//! let mem_lookup = lookup64::MemLookup::<i64>::new();
+//! let mem_lookup = lookup64::MemLookup::<i64>::default();
 //!
 //! // memory-mapped
 //! let path: std::path::PathBuf = "/tmp/some-path".try_into().unwrap();
 //! let memmap_lookup = lookup64::MemMapLookup::<i64>::create(&path);
 //! ```
+
+#![warn(clippy::pedantic)]
 
 pub mod index;
 pub mod lookup;
