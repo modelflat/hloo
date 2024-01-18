@@ -97,7 +97,7 @@ where
     /// Signature of this vector.
     #[must_use]
     pub fn sig(&self) -> u64 {
-        self.data.as_ref().map_or(u64::MAX, |d| d.sig())
+        self.data.as_ref().map_or(u64::MAX, Data::sig)
     }
 
     /// Whether this vector is empty.
@@ -126,7 +126,7 @@ where
 
     /// Flushes memory-mapped data into file.
     pub fn flush(&self) -> Result<(), MmVecError> {
-        Ok(self.data.as_ref().map_or(Ok(()), |d| d.flush())?)
+        Ok(self.data.as_ref().map_or(Ok(()), Data::flush)?)
     }
 
     /// Destroys self, removing the underlying file.
@@ -308,7 +308,7 @@ where
     }
 
     fn header_offset(&self, offset: usize) -> *const u8 {
-        let start = self.header_mmap.as_ptr() as *const u8;
+        let start = self.header_mmap.as_ptr();
         assert!(offset < Self::HEADER_SIZE as usize, "offset is out of bounds");
         assert!(offset % 8 == 0, "offset is not placed on u64 boundary");
         // Safety: we checked prerequisites for `add`
@@ -316,7 +316,7 @@ where
     }
 
     fn header_offset_mut(&mut self, offset: usize) -> *mut u8 {
-        let start = self.header_mmap.as_mut_ptr() as *mut u8;
+        let start = self.header_mmap.as_mut_ptr();
         assert!(offset < Self::HEADER_SIZE as usize, "offset is out of bounds");
         assert!(offset % 8 == 0, "offset is not placed on u64 boundary");
         // Safety: we checked prerequisites for `add`

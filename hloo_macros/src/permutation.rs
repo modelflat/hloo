@@ -101,6 +101,10 @@ impl ToTokens for Permutation<'_> {
                     Self::mask_static(w)
                 }
 
+                fn mask_and_cmp(&self, w: &#data_type_name, other_mask: &#mask_type_name) -> std::cmp::Ordering {
+                    Self::mask_static(w).cmp(other_mask)
+                }
+
                 fn n_blocks(&self) -> u32 {
                     #n_blocks as u32
                 }

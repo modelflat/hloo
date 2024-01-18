@@ -22,11 +22,11 @@ pub struct SearchResult<V> {
 }
 
 impl<V> SearchResult<V> {
-    pub fn iter(&self) -> impl Iterator<Item = &SearchResultItem<V>> {
+    pub fn flat_iter(&self) -> impl Iterator<Item = &SearchResultItem<V>> {
         self.result.iter().flatten()
     }
 
-    pub fn into_iter(self) -> impl Iterator<Item = SearchResultItem<V>> {
+    pub fn into_flat_iter(self) -> impl Iterator<Item = SearchResultItem<V>> {
         self.result.into_iter().flatten()
     }
 }
@@ -68,6 +68,7 @@ where
     }
 
     /// Perform a distance search.
+    #[inline(never)]
     fn search(&self, key: &K, distance: u32) -> Result<SearchResult<V>, SearchError> {
         let max_distance = self.max_search_distance();
         if distance > max_distance {
@@ -95,7 +96,7 @@ where
     {
         self.search(key, distance)
             .expect("distance exceeds max")
-            .into_iter()
+            .into_flat_iter()
             .collect()
     }
 

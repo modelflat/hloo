@@ -23,7 +23,8 @@
 //! let memmap_lookup = lookup64::MemMapLookup::<i64>::create(&path);
 //! ```
 
-#![warn(clippy::pedantic)]
+// #![warn(clippy::pedantic)]
+#![warn(clippy::redundant_closure_for_method_calls)]
 
 pub mod index;
 pub mod lookup;

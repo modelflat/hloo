@@ -25,7 +25,6 @@ pub enum BlockLocator {
 }
 
 impl BlockLocator {
-    #[inline(always)]
     pub fn locate_by<'a, T>(&'_ self, slice: &'a [T], f: impl Fn(&T) -> Ordering) -> &'a [T] {
         match self {
             BlockLocator::BinarySearch => extended_binary_search_by(slice, f),
@@ -144,13 +143,14 @@ where
     fn remove(&mut self, keys: &[K]) -> Result<(), Self::Error>;
 
     /// Retrieve candidates for a given search.
+    #[inline(never)]
     fn get_candidates<'a>(&'a self, key: &K) -> Candidates<'a, K, V> {
         let permuter = self.permuter();
         let permuted_key = permuter.apply(key);
         let masked_key = permuter.mask(&permuted_key);
         let block = self
             .block_locator()
-            .locate_by(self.data(), |(key, _)| permuter.mask(key).cmp(&masked_key));
+            .locate_by(self.data(), |(key, _)| permuter.mask_and_cmp(key, &masked_key));
         Candidates::new(permuted_key, block)
     }
 

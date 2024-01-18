@@ -5,9 +5,9 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-/// Partition a slice according to predicate.
+/// Partition the slice according to the given predicate.
 ///
-/// Elements for which predicate returns `true` go to the start of the slice.
+/// Elements for which the predicate returns `true` are placed at the start of the slice.
 pub fn partition<T, F>(data: &mut [T], predicate: F) -> usize
 where
     F: Fn(&T) -> bool,
@@ -16,16 +16,34 @@ where
     data.partition_point(predicate)
 }
 
-/// Search for a value using binary search. If a value is found, return a slice starting at the first occurence
-/// of the found value, and ending at the last occurence (inclusive). If the value is not found, return empty slice.
+/// Search the slice using binary search with the given comparator. Return a slice starting at the first index for
+/// which the comparator returns `Ordering::Equal`, and ending at the last such index (inclusive). If the comparator
+/// never returns `Ordering::Equal`, return an empty slice.
 pub fn extended_binary_search_by<T>(slice: &[T], f: impl Fn(&T) -> Ordering) -> &[T] {
+    // perform the first two steps of the binary search manually to get rid of OOB values right away
+    // this may be helpful with some of the skew cases, and makes this search more robust against user-provided data
+    let mid = slice.len() / 2;
+    let slice = if f(&slice[mid]).then(Ordering::Greater) == Ordering::Greater {
+        if f(&slice[0]) == Ordering::Greater {
+            // not in bounds
+            return &slice[0..0];
+        }
+        &slice[..mid + 1]
+    } else if f(&slice[slice.len() - 1]) == Ordering::Less {
+        // not in bounds
+        return &slice[0..0];
+    } else {
+        &slice[mid..]
+    };
+
     let maybe_block_start = slice.binary_search_by(|el| {
         // 0 0 2 2 2 3 4 5 13
         //     ^st ^end
         f(el).then(Ordering::Greater)
     });
+
     match maybe_block_start {
-        Ok(_) => unreachable!("not possible to find element with a comparator fn that never returns Equals"),
+        Ok(_) => unreachable!("not possible to find an element with a comparator fn that never returns Equals"),
         Err(pos) if pos < slice.len() && f(&slice[pos]).is_eq() => {
             // exp_search performs best when blocks are small, otherwise binary_search is better
             let block_end = exponential_search_by(&slice[pos..], |el| {
@@ -34,7 +52,7 @@ pub fn extended_binary_search_by<T>(slice: &[T], f: impl Fn(&T) -> Ordering) -> 
                 f(el).then(Ordering::Less)
             });
             match block_end {
-                Ok(_) => unreachable!("not possible to find element with a comparator fn that never returns Equals"),
+                Ok(_) => unreachable!("not possible to find an element with a comparator fn that never returns Equals"),
                 Err(block_end) => &slice[pos..(pos + block_end).min(slice.len())],
             }
         }
@@ -42,17 +60,17 @@ pub fn extended_binary_search_by<T>(slice: &[T], f: impl Fn(&T) -> Ordering) -> 
     }
 }
 
-/// Performs exponential search.
-fn exponential_search_by<T, F>(data: &[T], f: F) -> Result<usize, usize>
+/// Perform an exponential binary search over the slice.
+fn exponential_search_by<T, F>(slice: &[T], f: F) -> Result<usize, usize>
 where
     F: Fn(&T) -> Ordering,
 {
     let mut bound = 1;
-    while bound < data.len() && matches!(f(&data[bound]), Ordering::Less) {
+    while bound < slice.len() && matches!(f(&slice[bound]), Ordering::Less) {
         bound <<= 1;
     }
     let start = bound >> 1;
-    data[start..data.len().min(bound + 1)]
+    slice[start..slice.len().min(bound + 1)]
         .binary_search_by(f)
         .map(|i| i + start)
         .map_err(|i| i + start)

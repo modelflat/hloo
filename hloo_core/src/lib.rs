@@ -1,6 +1,8 @@
 mod bit_block;
 mod permutations;
 
+use std::cmp::Ordering;
+
 pub use bit_block::{BitBlock, BitOp, PermutedBitBlock};
 pub use permutations::{create_permutations, Permutation};
 
@@ -44,6 +46,9 @@ pub trait BitPermuter<B, M> {
 
     /// Apply mask to bit sequence `key`.
     fn mask(&self, key: &B) -> M;
+
+    /// Apply mask to bit sequence `key` and compare it to `other_key`.
+    fn mask_and_cmp(&self, key: &B, other_mask: &M) -> Ordering;
 
     /// Get number of blocks this permuter operates on.
     fn n_blocks(&self) -> u32;
