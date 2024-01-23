@@ -86,7 +86,6 @@ pub fn make_permutations(item: TokenStream) -> TokenStream {
         pub struct #struct_name;
 
         impl #struct_name {
-            #[inline(always)]
             pub fn get_variant(variant: usize) -> Box<dyn BitPermuter<#data_type_name, #mask_type_name>> {
                 match variant {
                     #( #variants_range => Box::new(#variants {}) as Box<dyn BitPermuter<#data_type_name, #mask_type_name>> ),*,
@@ -94,7 +93,6 @@ pub fn make_permutations(item: TokenStream) -> TokenStream {
                 }
             }
 
-            #[inline(always)]
             pub fn get_all_variants() -> Vec<Box<dyn BitPermuter<#data_type_name, #mask_type_name>>> {
                 vec![
                     #( Self::get_variant(#all_variants_range) ),*

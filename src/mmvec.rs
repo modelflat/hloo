@@ -204,14 +204,12 @@ where
 
         // On Windows it is required that file is not mapped before resizing.
         // The safest option is to just drop and recreate the Data.
-        #[cfg(windows)]
-        {
+        if cfg!(windows) {
             drop(self.data.take());
             self.data = Some(Data::from_file_unchecked_resized(self.path(), new_len)?);
+        } else {
+            self.data.as_mut().map_or(Ok(()), |d| d.resize(new_len))?;
         }
-
-        #[cfg(not(windows))]
-        self.data.as_mut().map_or(Ok(()), |d| d.resize(new_len))?;
 
         Ok(())
     }
@@ -419,8 +417,7 @@ fn resize_file_to_fit<T>(file: &File, header_size: u64, len: usize) -> io::Resul
 unsafe fn mmap(file: &File, offset: u64, len: usize) -> io::Result<MmapMut> {
     let mut opts = MmapOptions::new();
     let mmap = opts.offset(offset).len(len).map_mut(file)?;
-    #[cfg(unix)]
-    {
+    if cfg!(unix) {
         mmap.advise(memmap2::Advice::Random).ok();
     }
     Ok(mmap)

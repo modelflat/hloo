@@ -143,7 +143,6 @@ where
     fn remove(&mut self, keys: &[K]) -> Result<(), Self::Error>;
 
     /// Retrieve candidates for a given search.
-    #[inline(never)]
     fn get_candidates<'a>(&'a self, key: &K) -> Candidates<'a, K, V> {
         let permuter = self.permuter();
         let permuted_key = permuter.apply(key);
@@ -175,8 +174,7 @@ where
     fn persist(&self) -> Result<(), Self::Error>;
 }
 
-/// Extract first element from a tuple.
-#[inline(always)]
+/// Extract the first element from a tuple.
 pub fn extract_key<K: Copy, V>(item: &(K, V)) -> K {
     item.0
 }

@@ -68,7 +68,6 @@ where
     }
 
     /// Perform a distance search.
-    #[inline(never)]
     fn search(&self, key: &K, distance: u32) -> Result<SearchResult<V>, SearchError> {
         let max_distance = self.max_search_distance();
         if distance > max_distance {
