@@ -41,8 +41,7 @@ pub fn make_permutations(item: TokenStream) -> TokenStream {
     let word_bits = params.w.unwrap_or(64);
     assert!(
         [8, 16, 32, 64].contains(&word_bits),
-        "word size {} is not supported",
-        word_bits
+        "word size {word_bits} is not supported"
     );
     let n_words = params.f / word_bits;
     assert!(params.f % word_bits == 0 && n_words > 0);

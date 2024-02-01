@@ -33,10 +33,10 @@ impl ToTokens for Bits<'_> {
         let byte_size = full_size / 8;
         let word_size = self.word_size;
         let word_bytes = self.word_size / 8;
-        let word_range_le = 0..self.n_words;
-        let word_range_be = word_range_le.clone();
-        let word_range_xor = word_range_le.clone();
-        let word_max = word_range_le.clone().map(|_| word_type_name.clone());
+        let word_range = 0..self.n_words;
+        let word_range_be = word_range.clone();
+        let word_range_xor = word_range.clone();
+        let word_max = word_range.clone().map(|_| word_type_name.clone());
 
         let data_type = match TypeArray::from_string(&format!("[{}; {}]", self.word_type_name, self.n_words)) {
             Ok(arr) => Type::Array(arr),
@@ -72,8 +72,8 @@ impl ToTokens for Bits<'_> {
                         panic!("should have length {}", #byte_size);
                     }
                     let mut data: #storage_type_name = Default::default();
-                    #(data[#word_range_le] = #word_type_name::from_be_bytes(
-                        raw_data[#word_range_le*#word_bytes..(#word_range_le + 1)*#word_bytes]
+                    #(data[#word_range] = #word_type_name::from_be_bytes(
+                        raw_data[#word_range*#word_bytes..(#word_range + 1)*#word_bytes]
                             .try_into()
                             .expect("slice with incorrect length")
                     ));*;

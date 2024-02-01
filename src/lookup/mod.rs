@@ -116,10 +116,11 @@ pub struct SimpleLookup<K, V, M, I> {
 }
 
 impl<K, V, M, I> SimpleLookup<K, V, M, I> {
+    #[must_use]
     pub fn new(indexes: Vec<I>) -> Self {
         Self {
             indexes,
-            _dummy: Default::default(),
+            _dummy: PhantomData,
         }
     }
 }
@@ -138,8 +139,8 @@ where
     ) -> Result<Self, <I as PersistentIndex<K, M>>::Error> {
         let mut indexes = Vec::new();
         for (i, p) in permuters.into_iter().enumerate() {
-            let index_path = path.join(format!("index_{:04}_{:016x}.dat", i, sig));
-            indexes.push(I::create(p, sig, &index_path)?)
+            let index_path = path.join(format!("index_{i:04}_{sig:016x}.dat"));
+            indexes.push(I::create(p, sig, &index_path)?);
         }
         Ok(Self::new(indexes))
     }
@@ -151,8 +152,8 @@ where
     ) -> Result<Self, <I as PersistentIndex<K, M>>::Error> {
         let mut indexes = Vec::new();
         for (i, p) in permuters.into_iter().enumerate() {
-            let index_path = path.join(format!("index_{:04}_{:016x}.dat", i, sig));
-            indexes.push(I::load(p, sig, &index_path)?)
+            let index_path = path.join(format!("index_{i:04}_{sig:016x}.dat"));
+            indexes.push(I::load(p, sig, &index_path)?);
         }
         Ok(Self::new(indexes))
     }

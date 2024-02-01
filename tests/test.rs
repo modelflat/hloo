@@ -19,9 +19,9 @@ fn flip_bits(mut bits: Bits, n: usize) -> Bits {
         let pos = (data_gen::random::<f32>() * 31f32) as usize;
         let bit = (bits.data[0] & (1 << pos)) >> pos;
         if bit == 0 {
-            bits.data[0] = bits.data[0] | (1 << pos);
+            bits.data[0] |= 1 << pos;
         } else {
-            bits.data[0] = bits.data[0] & !(1 << pos);
+            bits.data[0] &= !(1 << pos);
         }
     }
     bits

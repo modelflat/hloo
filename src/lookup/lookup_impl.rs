@@ -94,7 +94,7 @@ impl From<&[u8]> for DynBits {
         match value.len() {
             lookup64::Bits::SIZE_BYTES => Self::Bits64(lookup64::Bits::from_le_bytes(value)),
             lookup256::Bits::SIZE_BYTES => Self::Bits256(lookup256::Bits::from_le_bytes(value)),
-            len => panic!("invalid slice size: {}", len),
+            len => panic!("invalid slice size: {len}"),
         }
     }
 }

@@ -2,8 +2,7 @@
 fn compute_mask(pos: usize, len: usize, word_size: usize) -> u64 {
     assert!(
         0 < word_size && word_size <= 64,
-        "word size {} is not supported",
-        word_size
+        "word size {word_size} is not supported"
     );
     assert!(
         pos + len <= word_size,
@@ -92,7 +91,7 @@ impl BitBlock {
 
     /// Length of this block in words
     pub fn len_words(&self, word_size: usize) -> usize {
-        let rem = if self.len() % word_size == 0 { 0 } else { 1 };
+        let rem = usize::from(self.len() % word_size != 0);
         self.len() / word_size + rem
     }
 
@@ -107,7 +106,7 @@ impl BitBlock {
             let start_idx = self.start_pos().max(word_start_idx);
             let end_idx = self.end_pos().min(word_end_idx);
             let part_len = end_idx - start_idx + 1;
-            parts.push(BitBlock::new(self.idx, start_idx, part_len))
+            parts.push(BitBlock::new(self.idx, start_idx, part_len));
         }
         parts
     }
@@ -283,15 +282,8 @@ impl std::fmt::Display for BitOp {
                 src_word,
                 src_mask,
                 dst_word,
-            } => write!(
-                f,
-                "a[{}] = ( a[{}] & {:0width$b} )",
-                dst_word,
-                src_word,
-                src_mask,
-                width = fmt_width
-            ),
-            Self::Copy { src_word, dst_word } => write!(f, "a[{}] = a[{}]", dst_word, src_word),
+            } => write!(f, "a[{dst_word}] = ( a[{src_word}] & {src_mask:0fmt_width$b} )"),
+            Self::Copy { src_word, dst_word } => write!(f, "a[{dst_word}] = a[{src_word}]"),
         }
     }
 }

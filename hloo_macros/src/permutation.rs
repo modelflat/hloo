@@ -110,6 +110,6 @@ impl ToTokens for Permutation<'_> {
                 }
             }
         };
-        tokens.extend(code)
+        tokens.extend(code);
     }
 }

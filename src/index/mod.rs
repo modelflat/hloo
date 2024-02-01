@@ -124,7 +124,7 @@ where
     /// Get permuter reference.
     fn permuter(&self) -> &dyn BitPermuter<K, M>;
 
-    /// Get currently used BlockLocator.
+    /// Get currently used `BlockLocator`.
     fn block_locator(&self) -> BlockLocator;
 
     /// Get data as a slice.
@@ -237,6 +237,6 @@ mod tests {
                 SearchResultItem::new(2, 1),
             ],
             "pos 0-2 - data"
-        )
+        );
     }
 }

@@ -28,7 +28,7 @@ pub fn extended_binary_search_by<T>(slice: &[T], f: impl Fn(&T) -> Ordering) -> 
             // not in bounds
             return &slice[0..0];
         }
-        &slice[..mid + 1]
+        &slice[..=mid]
     } else if f(&slice[slice.len() - 1]) == Ordering::Less {
         // not in bounds
         return &slice[0..0];
@@ -76,6 +76,7 @@ where
         .map_err(|i| i + start)
 }
 
+/// Create a u64 signature for a given type and permutation parameters.
 pub fn sign_type<T: 'static>(f: u64, r: u64, k: u64, w: u64) -> u64 {
     let t = TypeId::of::<T>();
     let mut hasher = DefaultHasher::new();
@@ -96,7 +97,7 @@ mod tests {
         let mut data = vec![0, 3, 4, 6, 3];
         let split = partition(&mut data, |el| *el != 3);
         assert_eq!(split, 3, "wrong split value");
-        assert_eq!(data, vec![0, 4, 6, 3, 3], "wrong partitioned data: {:?}", data);
+        assert_eq!(data, vec![0, 4, 6, 3, 3], "wrong partitioned data: {data:?}");
     }
 
     #[test]

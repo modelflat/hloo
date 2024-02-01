@@ -23,24 +23,17 @@
 //! let memmap_lookup = lookup64::MemMapLookup::<i64>::create(&path);
 //! ```
 
-// #![warn(clippy::pedantic)]
-#![warn(clippy::redundant_closure_for_method_calls)]
-
 pub mod index;
 pub mod lookup;
 pub mod util;
 
 pub mod mmvec;
 
-use std::sync::Arc;
-
 pub use hloo_core;
 pub use hloo_macros::make_permutations;
 
 pub use index::Index;
 pub use lookup::{Lookup, SimpleLookup};
-
-pub type DynIndex<K, V, M, E> = Arc<dyn Index<K, V, M, Error = E>>;
 
 pub type DynBitPermuter<B, M> = Box<dyn hloo_core::BitPermuter<B, M>>;
 

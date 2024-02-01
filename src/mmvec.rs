@@ -204,11 +204,13 @@ where
 
         // On Windows it is required that file is not mapped before resizing.
         // The safest option is to just drop and recreate the Data.
-        #[cfg(windows)] {
+        #[cfg(windows)]
+        {
             drop(self.data.take());
             self.data = Some(Data::from_file_unchecked_resized(self.path(), new_len)?);
         }
-        #[cfg(not(windows))] {
+        #[cfg(not(windows))]
+        {
             self.data.as_mut().map_or(Ok(()), |d| d.resize(new_len))?;
         }
 
@@ -223,8 +225,8 @@ where
 {
     #[allow(unused)]
     file: File,
-    header_mmap: MmapMut,
-    data_mmap: MmapMut,
+    mapped_header: MmapMut,
+    mapped_data: MmapMut,
     dummy: PhantomData<T>,
 }
 
@@ -246,8 +248,8 @@ where
 
         Ok(Self {
             file,
-            header_mmap,
-            data_mmap,
+            mapped_header: header_mmap,
+            mapped_data: data_mmap,
             dummy: PhantomData,
         })
     }
@@ -288,7 +290,7 @@ where
         data.set_sig(sig);
         // Safety: we know that the file is sized to contain exactly len Ts
         unsafe { data.set_len(len as u64) };
-        data.header_mmap.flush()?;
+        data.mapped_header.flush()?;
         Ok(data)
     }
 
@@ -307,7 +309,7 @@ where
     }
 
     fn header_offset(&self, offset: usize) -> *const u8 {
-        let start = self.header_mmap.as_ptr();
+        let start = self.mapped_header.as_ptr();
         assert!(offset < Self::HEADER_SIZE as usize, "offset is out of bounds");
         assert!(offset % 8 == 0, "offset is not placed on u64 boundary");
         // Safety: we checked prerequisites for `add`
@@ -315,7 +317,7 @@ where
     }
 
     fn header_offset_mut(&mut self, offset: usize) -> *mut u8 {
-        let start = self.header_mmap.as_mut_ptr();
+        let start = self.mapped_header.as_mut_ptr();
         assert!(offset < Self::HEADER_SIZE as usize, "offset is out of bounds");
         assert!(offset % 8 == 0, "offset is not placed on u64 boundary");
         // Safety: we checked prerequisites for `add`
@@ -328,7 +330,7 @@ where
         // 1) we own the file handle
         // 2) it is exclusively locked by us
         // 3) we know that this location is not out of bounds because we checked the file length on creation.
-        unsafe { *(self.header_offset(0) as *const u64) }
+        unsafe { *self.header_offset(0).cast::<u64>() }
     }
 
     fn set_sig(&mut self, sig: u64) {
@@ -338,30 +340,30 @@ where
         // 2) it is exclusively locked by us
         // 3) we know that this location is not out of bounds because we checked the file length on creation.
         unsafe {
-            *(self.header_offset_mut(0) as *mut u64) = sig;
+            *self.header_offset_mut(0).cast::<u64>() = sig;
         }
     }
 
     pub fn len(&self) -> u64 {
         // Safety:
         // See safety comment in `.sig()`, same applies here.
-        unsafe { *(self.header_offset(8) as *const u64) }
+        unsafe { *self.header_offset(8).cast::<u64>() }
     }
 
     unsafe fn set_len(&mut self, len: u64) {
-        *(self.header_offset_mut(8) as *mut u64) = len;
+        *self.header_offset_mut(8).cast::<u64>() = len;
     }
 
     pub fn capacity(&self) -> usize {
-        self.data_mmap.len() / std::mem::size_of::<T>()
+        self.mapped_data.len() / std::mem::size_of::<T>()
     }
 
     pub unsafe fn as_slice(&self) -> &[T] {
-        slice::from_raw_parts(self.data_mmap.as_ptr() as *const T, self.len() as usize)
+        slice::from_raw_parts(self.mapped_data.as_ptr().cast::<T>(), self.len() as usize)
     }
 
     pub unsafe fn as_slice_mut(&mut self) -> &mut [T] {
-        slice::from_raw_parts_mut(self.data_mmap.as_mut_ptr() as *mut T, self.len() as usize)
+        slice::from_raw_parts_mut(self.mapped_data.as_mut_ptr().cast::<T>(), self.len() as usize)
     }
 
     #[cfg(not(windows))]
@@ -369,14 +371,14 @@ where
         self.flush()?;
         let new_len_bytes = resize_file_to_fit::<T>(&self.file, Self::HEADER_SIZE, len)?;
         // Safety: we own the file handle, have exclusive lock in place and know that
-        self.data_mmap = mmap(&self.file, Self::HEADER_SIZE, new_len_bytes as usize)?;
+        self.mapped_data = mmap(&self.file, Self::HEADER_SIZE, new_len_bytes as usize)?;
         self.set_len(len as u64);
         Ok(())
     }
 
     pub fn flush(&self) -> io::Result<()> {
-        self.header_mmap.flush()?;
-        self.data_mmap.flush()?;
+        self.mapped_header.flush()?;
+        self.mapped_data.flush()?;
         Ok(())
     }
 }
@@ -430,12 +432,12 @@ mod tests {
     fn with_file_path(f: impl FnOnce(&Path)) {
         let tmp = tempfile::tempdir().expect("failed to create tmp dir");
         let test_path = tmp.path().join("test.bin");
-        f(&test_path)
+        f(&test_path);
     }
 
     #[allow(unused)]
     fn get_file_len(path: &Path) -> u64 {
-        let file3 = open_file(&path).expect("failed to open file");
+        let file3 = open_file(path).expect("failed to open file");
         file3.metadata().expect("failed to read metadata").len()
     }
 
@@ -445,7 +447,7 @@ mod tests {
             let data = Data::<u64>::new_uninit(test_path, 42, 100).expect("failed to create data");
             assert_eq!(data.sig(), 42, "sig");
             assert_eq!(data.len(), 100, "len");
-        })
+        });
     }
 
     #[test]
@@ -456,7 +458,7 @@ mod tests {
             unsafe { data.set_len(1000) };
             assert_eq!(data.sig(), 420, "sig");
             assert_eq!(data.len(), 1000, "len");
-        })
+        });
     }
 
     #[test]
@@ -471,7 +473,7 @@ mod tests {
             let data = unsafe { Data::<u64>::from_file_unchecked(test_path) }.expect("failed to create data");
             assert_eq!(data.sig(), 420, "sig");
             assert_eq!(data.len(), 1000, "len");
-        })
+        });
     }
 
     #[cfg(not(windows))]
@@ -483,7 +485,7 @@ mod tests {
                 unsafe { data.resize(1000) }.expect("failed to resize data");
                 assert_eq!(data.len(), 1000, "updated len");
                 assert_eq!(
-                    data.data_mmap.len(),
+                    data.mapped_data.len(),
                     1000 * size_of::<u64>(),
                     "mmap size should be able to fit resized data"
                 );
@@ -498,7 +500,7 @@ mod tests {
                 Data::<u64>::HEADER_SIZE + 1000 * size_of::<u64>() as u64,
                 "file should preserve resized length after data is destroyed"
             );
-        })
+        });
     }
 
     #[cfg(not(windows))]
@@ -510,7 +512,7 @@ mod tests {
                 data.resize(10).expect("failed to resize data");
                 assert_eq!(data.len(), 10, "updated len");
                 assert_eq!(
-                    data.data_mmap.len(),
+                    data.mapped_data.len(),
                     10 * size_of::<u64>(),
                     "mmap size should be able to fit resized data"
                 );
@@ -525,7 +527,7 @@ mod tests {
                 Data::<u64>::HEADER_SIZE + 10 * size_of::<u64>() as u64,
                 "file should preserve resized length after data is destroyed"
             );
-        })
+        });
     }
 
     #[test]
@@ -536,6 +538,6 @@ mod tests {
             drop(vec);
             let result = MmVec::<i32>::from_path(0, path.to_path_buf()).expect("failed to load memvec from file");
             assert_eq!(result.as_slice(), data.as_slice());
-        })
+        });
     }
 }

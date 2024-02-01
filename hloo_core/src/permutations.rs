@@ -10,8 +10,8 @@ pub struct Permutation {
 }
 
 impl Permutation {
-    pub fn from_blocks(head: usize, blocks: Vec<BitBlock>) -> Self {
-        let permuted_blocks = create_permuted_blocks(&blocks);
+    pub fn from_blocks(head: usize, blocks: &[BitBlock]) -> Self {
+        let permuted_blocks = create_permuted_blocks(blocks);
         Self {
             head,
             blocks: permuted_blocks,
@@ -55,7 +55,7 @@ impl Permutation {
 
     pub fn mask_words(&self, word_size: usize) -> usize {
         let bits = self.mask_bits();
-        bits / word_size + if bits % word_size == 0 { 0 } else { 1 }
+        bits / word_size + usize::from(bits % word_size != 0)
     }
 }
 
@@ -67,7 +67,7 @@ fn compile_permutation(
     let grouped_by_dst_word = ops.group_by(|op| (op.dst_word(), op.src_word()));
 
     let mut result: HashMap<_, Vec<_>> = HashMap::new();
-    for ((dst_word, src_word), mut ops) in grouped_by_dst_word.into_iter() {
+    for ((dst_word, src_word), mut ops) in &grouped_by_dst_word {
         let mut prev_op = ops.next().expect("empty group");
         let mut word_ops = Vec::new();
         for op in ops {
@@ -82,7 +82,7 @@ fn compile_permutation(
                 }
             }
             word_ops.push(prev_op);
-            prev_op = op
+            prev_op = op;
         }
         word_ops.push(prev_op);
         result
@@ -94,11 +94,11 @@ fn compile_permutation(
 }
 
 fn split_bits_into_blocks(f: usize, r: usize) -> Vec<BitBlock> {
-    assert!(f >= r, "{} is not enough bits to split into {} blocks", f, r);
+    assert!(f >= r, "{f} is not enough bits to split into {r} blocks");
     let mut blocks = Vec::with_capacity(r);
     let mut acc = 0;
     for i in 0..r {
-        let size = f / r + if i < f % r { 1 } else { 0 };
+        let size = f / r + usize::from(i < f % r);
         blocks.push(BitBlock::new(i, acc, size));
         acc += size;
     }
@@ -124,25 +124,29 @@ fn create_permuted_blocks(reordered_blocks: &[BitBlock]) -> Vec<PermutedBitBlock
     permuted
 }
 
+/// Creates bit permutations from given parameters.
+///
+/// # Panics
+/// This function panics if either of the following is true:
+/// - `total_bits` is not divisible by `word_bits`
+/// - `total_bits` < k
+/// - `r` == 0
+/// - `k` == 0
 pub fn create_permutations(total_bits: usize, word_bits: usize, r: usize, k: usize) -> Vec<Permutation> {
     assert!(
         total_bits % word_bits == 0,
-        "total_bits has to be divisible by word_bits (tb={} wb={})",
-        total_bits,
-        word_bits
+        "total_bits has to be divisible by word_bits (tb={total_bits} wb={word_bits})"
     );
     assert!(
         total_bits >= k,
-        "total_bits must be able to fit k (tb={} k={})",
-        total_bits,
-        k,
+        "total_bits must be able to fit k (tb={total_bits} k={k})",
     );
-    assert!(r != 0 && k != 0, "r and k cannot be 0 (r={} k={})", r, k);
+    assert!(r != 0 && k != 0, "r and k cannot be 0 (r={r} k={k})");
     let blocks = split_bits_into_blocks(total_bits, r);
     (0..r)
         .combinations(k)
         .map(|order| reorder_blocks(&blocks, &order))
-        .map(|blocks| Permutation::from_blocks(k, blocks))
+        .map(|blocks| Permutation::from_blocks(k, &blocks))
         .collect()
 }
 

@@ -179,27 +179,23 @@ mod tests {
             assert_eq!(
                 index.data().len(),
                 data_part_1.len(),
-                "[{}] index length is wrong after first insert",
-                i
+                "[{i}] index length is wrong after first insert"
             );
             assert_eq!(
                 index.data(),
                 expected_first,
-                "[{}] index contents is wrong after first insert",
-                i
+                "[{i}] index contents is wrong after first insert"
             );
             index.insert(&data_part_2).unwrap();
             assert_eq!(
                 index.data().len(),
                 data_part_1.len() + data_part_2.len(),
-                "[{}] index length is wrong after second insert",
-                i
+                "[{i}] index length is wrong after second insert"
             );
             assert_eq!(
                 index.data(),
                 expected_second,
-                "[{}] index contents is wrong after second insert",
-                i
+                "[{i}] index contents is wrong after second insert"
             );
         }
     }
@@ -236,8 +232,7 @@ mod tests {
             assert_eq!(
                 index.data(),
                 expected,
-                "[{}] index contents is wrong after second insert",
-                i
+                "[{i}] index contents is wrong after second insert"
             );
         }
     }
