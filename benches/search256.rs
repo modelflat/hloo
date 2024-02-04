@@ -14,7 +14,7 @@ fn generate_perfect_data(n: usize, _: usize) -> Vec<(Bits, usize)> {
 }
 
 fn generate_bad_data(n: usize, block_size: usize) -> Vec<(Bits, usize)> {
-    generate_uniform_data_with_block_size(n, block_size, false, Bits::new).collect()
+    generate_uniform_data_with_block_size(n, block_size, true, Bits::new).collect()
 }
 
 fn generate_target(data: &[(Bits, usize)], change_bits: usize) -> Bits {

@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use hloo::index::{Candidates, SearchResultItem};
 
-hloo::init_lookup!(LookupUtil, 32, 5, 1, 32);
 // 7 7 6 6 6
+hloo::init_lookup!(LookupUtil, 32, 5, 1, 32);
 
 fn generate_data(n: usize) -> Vec<(Bits, i64)> {
     let mut data = Vec::new();

@@ -1,18 +1,19 @@
 [package]
 name = "hloo"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 
 [workspace]
+package.version = "0.1.0"
 members = ["hloo_core", "hloo_macros", "data_gen"]
 
 [dependencies]
 hloo_core = { path = "hloo_core" }
 hloo_macros = { path = "hloo_macros" }
 thiserror = "1"
-memmap2 = { version = "0.7" }
-fs4 = { version = "0.6", features = ["sync"] }
-tempfile = { version = "3" }
+memmap2 = "0.9"
+fs4 = "0.7"
+tempfile = "3"
 
 [dev-dependencies]
 data_gen = { path = "data_gen" }
