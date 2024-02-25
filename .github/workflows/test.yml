@@ -13,7 +13,7 @@ jobs:
           - ubuntu-22.04
           - windows-2022
         toolchain:
-          - 1.75.0
+          - 1.76.0
     runs-on: ${{ matrix.os }}
     steps:
       - name: checkout
