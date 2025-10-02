@@ -64,7 +64,7 @@ fn compile_permutation(
     word_size: usize,
     optimize: bool,
 ) -> HashMap<usize, Vec<BitOp>> {
-    let grouped_by_dst_word = ops.group_by(|op| (op.dst_word(), op.src_word()));
+    let grouped_by_dst_word = ops.chunk_by(|op| (op.dst_word(), op.src_word()));
 
     let mut result: HashMap<_, Vec<_>> = HashMap::new();
     for ((dst_word, src_word), mut ops) in &grouped_by_dst_word {

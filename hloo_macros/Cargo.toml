@@ -1,22 +1,23 @@
 [package]
 name = "hloo_macros"
 version.workspace = true
-edition = "2021"
+edition = "2024"
 
 [lib]
 proc-macro = true
 
 [dependencies]
 hloo_core = { path = "../hloo_core" }
-darling = "0.20"
+darling = "0.21"
 proc-macro2 = "1"
 quote = "1"
+syn = "2"
 
 [dev-dependencies]
-rand = "0.8"
+rand = "0.9"
 
 [dev-dependencies.criterion]
-version = "0.5"
+version = "0.7"
 default-features = false
 features = ["cargo_bench_support", "html_reports"]
 

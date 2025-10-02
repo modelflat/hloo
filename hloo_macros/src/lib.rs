@@ -5,8 +5,8 @@ mod permutation;
 extern crate proc_macro;
 
 use darling::{
-    export::{syn::Ident, NestedMeta},
     Error, FromMeta,
+    export::{NestedMeta, syn::Ident},
 };
 use hloo_core::create_permutations;
 use proc_macro::TokenStream;

@@ -2,14 +2,14 @@
 
 use core::slice;
 use std::{
-    fs::{copy, remove_file, rename, File, OpenOptions},
+    fs::{File, OpenOptions, copy, remove_file, rename},
     io,
     marker::PhantomData,
     mem::size_of,
     path::{Path, PathBuf},
 };
 
-use fs4::FileExt;
+use fs4::fs_std::FileExt;
 use memmap2::{MmapMut, MmapOptions};
 use thiserror::Error;
 
@@ -176,9 +176,11 @@ where
     {
         self.flush()?;
         let current_len = self.len();
-        self.resize(current_len + items.len())?;
-        self.as_slice_mut()[current_len..].copy_from_slice(items);
-        self.as_slice_mut().sort_unstable_by_key(sort_key);
+        unsafe {
+            self.resize(current_len + items.len())?;
+            self.as_slice_mut()[current_len..].copy_from_slice(items);
+            self.as_slice_mut().sort_unstable_by_key(sort_key);
+        }
         Ok(())
     }
 
@@ -193,9 +195,11 @@ where
         S: Fn(&T) -> O,
         O: Ord,
     {
-        let split = partition(self.as_slice_mut(), |el| !predicate(el));
-        self.resize(split)?;
-        self.as_slice_mut().sort_unstable_by_key(sort_key);
+        unsafe {
+            let split = partition(self.as_slice_mut(), |el| !predicate(el));
+            self.resize(split)?;
+            self.as_slice_mut().sort_unstable_by_key(sort_key);
+        }
         Ok(())
     }
 
@@ -243,8 +247,8 @@ where
         // TODO proper error
         assert!(len_bytes >= Self::HEADER_SIZE, "file is too small");
 
-        let header_mmap = mmap(&file, 0, Self::HEADER_SIZE as usize)?;
-        let data_mmap = mmap(&file, Self::HEADER_SIZE, (len_bytes - Self::HEADER_SIZE) as usize)?;
+        let header_mmap = unsafe { mmap(&file, 0, Self::HEADER_SIZE as usize) }?;
+        let data_mmap = unsafe { mmap(&file, Self::HEADER_SIZE, (len_bytes - Self::HEADER_SIZE) as usize) }?;
 
         Ok(Self {
             file,
@@ -258,7 +262,7 @@ where
     unsafe fn from_file_unchecked(path: &Path) -> io::Result<Self> {
         let file = open_file(path)?;
         file.try_lock_exclusive()?;
-        Self::from_file_unchecked_impl(file)
+        unsafe { Self::from_file_unchecked_impl(file) }
     }
 
     /// Memory maps the file, resizing it to fit `len` Ts.
@@ -351,7 +355,7 @@ where
     }
 
     unsafe fn set_len(&mut self, len: u64) {
-        *self.header_offset_mut(8).cast::<u64>() = len;
+        unsafe { *self.header_offset_mut(8).cast::<u64>() = len };
     }
 
     pub fn capacity(&self) -> usize {
@@ -359,11 +363,11 @@ where
     }
 
     pub unsafe fn as_slice(&self) -> &[T] {
-        slice::from_raw_parts(self.mapped_data.as_ptr().cast::<T>(), self.len() as usize)
+        unsafe { slice::from_raw_parts(self.mapped_data.as_ptr().cast::<T>(), self.len() as usize) }
     }
 
     pub unsafe fn as_slice_mut(&mut self) -> &mut [T] {
-        slice::from_raw_parts_mut(self.mapped_data.as_mut_ptr().cast::<T>(), self.len() as usize)
+        unsafe { slice::from_raw_parts_mut(self.mapped_data.as_mut_ptr().cast::<T>(), self.len() as usize) }
     }
 
     #[cfg(not(windows))]
@@ -419,7 +423,7 @@ fn resize_file_to_fit<T>(file: &File, header_size: u64, len: usize) -> io::Resul
 
 unsafe fn mmap(file: &File, offset: u64, len: usize) -> io::Result<MmapMut> {
     let mut opts = MmapOptions::new();
-    let mmap = opts.offset(offset).len(len).map_mut(file)?;
+    let mmap = unsafe { opts.offset(offset).len(len).map_mut(file)? };
     #[cfg(unix)]
     mmap.advise(memmap2::Advice::Random).ok();
     Ok(mmap)

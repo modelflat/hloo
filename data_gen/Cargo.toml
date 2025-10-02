@@ -1,8 +1,8 @@
 [package]
 name = "data_gen"
 version.workspace = true
-edition = "2021"
+edition = "2024"
 
 [dependencies]
-rand = "0.8"
-itertools = "0.12"
+rand = "0.9"
+itertools = "0.14"
