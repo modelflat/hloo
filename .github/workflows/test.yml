@@ -3,17 +3,17 @@ name: Test
 on:
   push:
     branches:
-      - 'main'
+      - "main"
 
 jobs:
   test:
     strategy:
       matrix:
-        os: 
-          - ubuntu-22.04
-          - windows-2022
+        os:
+          - ubuntu-24.04
+          - windows-2025
         toolchain:
-          - 1.76.0
+          - 1.90.0
     runs-on: ${{ matrix.os }}
     steps:
       - name: checkout
